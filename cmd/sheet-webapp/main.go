@@ -16,13 +16,14 @@ func main() {
 	spreadsheet := clice.New()
 
 	ctx := context.Background()
-	err := spreadsheet.UpdateCell(ctx, 0, 0, "'界'")
+
+	err := spreadsheet.UpdateCell(ctx, 0, 0, `"Hello, world!"`)
 	if err != nil {
 		fmt.Println("ERROR", err)
 		return
 	}
 
-	err = spreadsheet.UpdateCell(ctx, 0, 1, `"Hello, world!"`)
+	err = spreadsheet.UpdateCell(ctx, 0, 1, "420")
 	if err != nil {
 		fmt.Println("ERROR", err)
 		return
