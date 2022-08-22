@@ -87,7 +87,7 @@ func (ss *SpreadSheet) evaluateCallExpression(ctx context.Context, cell *Cell, e
 
 	case *ast.Ident:
 		switch fn.Name {
-		case "value":
+		case "cell":
 			intType := reflect.TypeOf(0)
 			colVal, err := ss.evaluate(ctx, cell, exp.Args[0])
 			if err != nil {

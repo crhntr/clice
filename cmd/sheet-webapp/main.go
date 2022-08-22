@@ -36,7 +36,7 @@ func main() {
 	}
 
 	err = spreadsheet.AddFunction("HasPrefix", strings.HasPrefix)
-	err = spreadsheet.UpdateCell(ctx, 0, 3, `HasPrefix(value(0, 1), "Hello")`)
+	err = spreadsheet.UpdateCell(ctx, 0, 3, `HasPrefix(cell(0, 0), "Hello")`)
 	if err != nil {
 		fmt.Println("ERROR", err)
 		return
