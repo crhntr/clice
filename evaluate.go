@@ -110,7 +110,11 @@ func (ss *SpreadSheet) evaluateCallExpression(ctx context.Context, cell *Cell, e
 			if !found {
 				return value{}, fmt.Errorf("not found")
 			}
+			if refCell.references(ctx, cell) {
+				return value{}, fmt.Errorf("recursive reference")
+			}
 			refCell.attach(ctx, cell)
+
 			return refCell.value, nil
 		}
 

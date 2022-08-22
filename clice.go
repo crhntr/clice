@@ -45,6 +45,17 @@ func (cell *Cell) detach(_ context.Context, u *Cell) {
 	delete(cell.observers, u)
 	delete(u.observing, cell)
 }
+func (cell *Cell) references(ctx context.Context, u *Cell) bool {
+	if cell == u {
+		return true
+	}
+	for c := range cell.observing {
+		if c.references(ctx, u) {
+			return true
+		}
+	}
+	return false
+}
 func (cell *Cell) Interface() any       { return cell.Value().Interface() }
 func (cell *Cell) Value() reflect.Value { return cell.value.Value() }
 
