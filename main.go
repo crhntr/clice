@@ -10,6 +10,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -75,7 +76,7 @@ func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
 	server.mut.RLock()
 	defer server.mut.RUnlock()
 
-	column, row, err := expression.CellCoordinates(req.PathValue("id"))
+	column, row, err := cellCoordinates(req.PathValue("id"))
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
@@ -142,7 +143,6 @@ func (server *server) postTableJSON(res http.ResponseWriter, req *http.Request) 
 	server.mut.Lock()
 	defer server.mut.Unlock()
 	server.table = table
-
 	server.render(res, req, "table", http.StatusOK, &server.table)
 }
 
@@ -153,26 +153,22 @@ func closeAndIgnoreError(c io.Closer) {
 func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 	server.mut.Lock()
 	defer server.mut.Unlock()
-
 	if err := req.ParseForm(); err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
-
 	for key, value := range req.Form {
 		if !strings.HasPrefix(key, "cell-") {
 			continue
 		}
-		column, row, err := expression.CellCoordinates(key)
+		column, row, err := cellCoordinates(key)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusBadRequest)
 			return
 		}
-
 		cell := server.cellPointer(column, row)
 		cell.Error = ""
 		cell.input = expression.Normalize(value[0])
-
 		var node expression.Node
 		if cell.input != "" {
 			node, err = expression.New(cell.input)
@@ -184,13 +180,11 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		}
 		cell.Expression = node
 	}
-
 	err := server.table.calculateValues()
 	if err != nil {
 		server.render(res, req, "table", http.StatusOK, &server.table)
 		return
 	}
-
 	server.render(res, req, "table", http.StatusOK, &server.table)
 }
 
@@ -284,7 +278,7 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 	table.RowCount = encoded.RowCount
 	table.ColumnCount = encoded.ColumnCount
 	for _, cell := range encoded.Cells {
-		column, row, err := expression.CellCoordinates(cell.ID)
+		column, row, err := cellCoordinates(cell.ID)
 		if err != nil {
 			return err
 		}
@@ -414,7 +408,11 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 		cell.Value = 0
 		return nil
 	}
-	result, err := evaluate(table, cell, visited, cell.Expression)
+	result, err := cell.Expression.Evaluate(&Scope{
+		cell:    cell,
+		Table:   table,
+		visited: visited,
+	})
 	if err != nil {
 		return err
 	}
@@ -422,74 +420,80 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 	return nil
 }
 
-func evaluate(table *Table, cell *Cell, visited visitSet, expressionNode expression.Node) (int, error) {
-	switch node := expressionNode.(type) {
-	case expression.IdentifierNode:
-		cell := table.Cell(node.Column, node.Row)
-		err := cell.evaluate(table, visited)
-		return cell.Value, err
-	case expression.IntegerNode:
-		return node.Evaluate()
-	case expression.ParenNode:
-		return evaluate(table, cell, visited, node.Node)
-	case expression.VariableNode:
-		switch node.Identifier.Value {
-		case expression.RowIdent:
-			return cell.Row, nil
-		case expression.ColumnIdent:
-			return cell.Column, nil
-		case expression.MaxRowIdent:
-			return table.RowCount - 1, nil
-		case expression.MaxColumnIdent:
-			return table.ColumnCount - 1, nil
-		case expression.MinRowIdent, expression.MinColumnIdent:
-			return 0, nil
-		default:
-			return 0, fmt.Errorf("unknown variable %s", node.Identifier.Value)
-		}
-	case expression.FactorialNode:
-		n, err := evaluate(table, cell, visited, node.Expression)
-		if err != nil {
-			return 0, err
-		}
-		if n > 20 {
-			return 0, fmt.Errorf("n! where n > 20 is too large")
-		}
-		for i := n - 1; i >= 2; i-- {
-			n *= i
-		}
-		return n, nil
-	case expression.BinaryExpressionNode:
-		leftResult, err := evaluate(table, cell, visited, node.Left)
-		if err != nil {
-			return 0, err
-		}
-		rightResult, err := evaluate(table, cell, visited, node.Right)
-		if err != nil {
-			return 0, err
-		}
-		switch node.Op.Type {
-		case expression.TokenAdd:
-			return leftResult + rightResult, nil
-		case expression.TokenSubtract:
-			return leftResult - rightResult, nil
-		case expression.TokenMultiply:
-			return leftResult * rightResult, nil
-		case expression.TokenExponent:
-			res := 1
-			for i := 0; i < rightResult; i++ {
-				res *= leftResult
-			}
-			return res, nil
-		case expression.TokenDivide:
-			if rightResult == 0 {
-				return 0, fmt.Errorf("could not divide by zero")
-			}
-			return leftResult / rightResult, nil
-		default:
-			return 0, fmt.Errorf("unknown binary operator %s", node.Op.Value)
-		}
+const (
+	RowIdent       = "ROW"
+	ColumnIdent    = "COLUMN"
+	MaxRowIdent    = "MAX_ROW"
+	MaxColumnIdent = "MAX_COLUMN"
+	MinRowIdent    = "MIN_ROW"
+	MinColumnIdent = "MIN_COLUMN"
+)
+
+type Scope struct {
+	Table   *Table
+	cell    *Cell
+	visited visitSet
+}
+
+func (s *Scope) Resolve(ident string) (int, error) {
+	switch ident {
+	case RowIdent:
+		return s.cell.Row, nil
+	case ColumnIdent:
+		return s.cell.Column, nil
+	case MaxRowIdent:
+		return s.Table.RowCount - 1, nil
+	case MaxColumnIdent:
+		return s.Table.ColumnCount - 1, nil
+	case MinRowIdent, MinColumnIdent:
+		return 0, nil
 	default:
-		return 0, fmt.Errorf("unknown expression node")
+		if !identifierPattern.MatchString(ident) {
+			return 0, fmt.Errorf("unknown variable %s", ident)
+		}
+		column, row, err := cellCoordinates(ident)
+		if err != nil {
+			return 0, err
+		}
+		cell := s.Table.Cell(column, row)
+		if cell.Expression == nil {
+			return 0, nil
+		}
+		return cell.Expression.Evaluate(&Scope{
+			cell:    cell,
+			Table:   s.Table,
+			visited: s.visited,
+		})
 	}
+}
+
+var identifierPattern = regexp.MustCompile("(?P<column>[A-Z]+)(?P<row>[0-9]+)")
+
+func cellCoordinates(in string) (int, int, error) {
+	in = strings.TrimPrefix(in, "cell-")
+	if !identifierPattern.MatchString(in) {
+		return 0, 0, fmt.Errorf("unexpected identifier pattern expected something like A4")
+	}
+	parts := identifierPattern.FindStringSubmatch(in)
+	columnName := parts[identifierPattern.SubexpIndex("column")]
+	row, err := strconv.Atoi(parts[identifierPattern.SubexpIndex("row")])
+	if err != nil {
+		return 0, 0, fmt.Errorf("failed to Parse row number: %w", err)
+	}
+	//if row > maxRow {
+	//	return 0, 0, fmt.Errorf("row number %d out of range it must be greater than 0 and less than or equal to %d", row, maxRow)
+	//}
+	column := columnNumber(columnName)
+	//if column > maxColumn {
+	//	return 0, 0, fmt.Errorf("column %s out of range it must be greater than or equal to %s and less than or equal to %s", columnName, columnLabel(0), columnLabel(maxColumn))
+	//}
+	return column, row, nil
+}
+
+func columnNumber(label string) int {
+	result := 0
+	for _, char := range label {
+		result = result*26 + int(char) - 64
+	}
+	return result - 1
 }

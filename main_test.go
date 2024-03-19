@@ -110,15 +110,17 @@ func Test_parse(t *testing.T) {
 			}
 			table := NewTable(10, 10)
 			table.Cells = []Cell{{Column: 0, Row: 1, Value: 100, Expression: expression.IntegerNode{Value: 100}}}
-			exp, err := expression.Parse(tokens, 0)
+			node, err := expression.Parse(tokens, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
 			visited := make(visitSet)
 
-			cell := Cell{Column: 0, Row: 0}
-
-			value, err := evaluate(&table, &cell, visited, exp)
+			value, err := node.Evaluate(&Scope{
+				cell:    &Cell{Column: 0, Row: 0},
+				Table:   &table,
+				visited: visited,
+			})
 			if err != nil {
 				t.Fatal(err)
 			}

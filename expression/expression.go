@@ -34,15 +34,6 @@ func Parse(tokens []Token, i int) (Node, error) {
 	}
 }
 
-const (
-	RowIdent       = "ROW"
-	ColumnIdent    = "COLUMN"
-	MaxRowIdent    = "MAX_ROW"
-	MaxColumnIdent = "MAX_COLUMN"
-	MinRowIdent    = "MIN_ROW"
-	MinColumnIdent = "MIN_COLUMN"
-)
-
 func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 	if i >= len(tokens) {
 		return nil, i, nil
@@ -58,16 +49,7 @@ func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 		}
 		return append(stack, IntegerNode{Token: token, Value: n}), 1, nil
 	case TokenIdentifier:
-		switch token.Value {
-		case RowIdent, ColumnIdent, MaxRowIdent, MaxColumnIdent, MinRowIdent, MinColumnIdent:
-			return append(stack, VariableNode{Identifier: token}), 1, nil
-		default:
-			column, row, err := CellCoordinates(token.Value)
-			if err != nil {
-				return nil, 0, err
-			}
-			return append(stack, IdentifierNode{Token: token, Row: row, Column: column}), 1, nil
-		}
+		return append(stack, IdentifierNode{Token: token}), 1, nil
 	case TokenLeftParenthesis:
 		var (
 			totalConsumed = 1
