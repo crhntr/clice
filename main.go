@@ -394,12 +394,12 @@ type visit struct {
 
 type visitSet map[visit]struct{}
 
-func (set visitSet) visit(row, column int) bool {
-	_, visited := set[visit{colum: column, row: row}]
+func (set visitSet) check(v visit) bool {
+	_, visited := set[v]
 	if visited {
 		return true
 	}
-	set[visit{colum: column, row: row}] = struct{}{}
+	set[v] = struct{}{}
 	return false
 }
 
@@ -417,16 +417,26 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 		cell.Value = 0
 		return nil
 	}
-	result, err := cell.Expression.Evaluate(&Scope{
-		cell:    cell,
-		Table:   table,
-		visited: visited,
-	})
+	result, err := cell.Expression.Evaluate(newScope(table, cell))
 	if err != nil {
 		return err
 	}
 	cell.Value = result
 	return nil
+}
+
+type Scope struct {
+	Table   *Table
+	cell    *Cell
+	visited visitSet
+}
+
+func newScope(table *Table, cell *Cell) *Scope {
+	return &Scope{
+		Table:   table,
+		cell:    cell,
+		visited: make(visitSet),
+	}
 }
 
 const (
@@ -437,12 +447,6 @@ const (
 	MinRowIdent    = "MIN_ROW"
 	MinColumnIdent = "MIN_COLUMN"
 )
-
-type Scope struct {
-	Table   *Table
-	cell    *Cell
-	visited visitSet
-}
 
 func (s *Scope) Resolve(ident string) (int, error) {
 	switch ident {
@@ -464,7 +468,7 @@ func (s *Scope) Resolve(ident string) (int, error) {
 		if err != nil {
 			return 0, err
 		}
-		if s.visited.visit(row, column) {
+		if s.visited.check(visit{row: row, colum: column}) {
 			return 0, fmt.Errorf("recursive reference to %s%d", columnLabel(column), row)
 		}
 		cell := s.Table.Cell(column, row)

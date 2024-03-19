@@ -97,30 +97,17 @@ func Test_parse(t *testing.T) {
 			Expression: "100 - 6 / 3",
 			Result:     98,
 		},
-		{
-			Name:       "factorial has higher president over subtraction",
-			Expression: "1 - 3!",
-			Result:     -5,
-		},
 	} {
 		t.Run(tt.Name, func(t *testing.T) {
-			tokens, err := expression.Tokens(tt.Expression)
-			if err != nil {
-				t.Fatal(err)
-			}
 			table := NewTable(10, 10)
 			table.Cells = []Cell{{Column: 0, Row: 1, Value: 100, Expression: expression.IntegerNode{Value: 100}}}
-			node, err := expression.Parse(tokens)
+
+			node, err := expression.New(tt.Expression)
 			if err != nil {
 				t.Fatal(err)
 			}
-			visited := make(visitSet)
 
-			value, err := node.Evaluate(&Scope{
-				cell:    &Cell{Column: 0, Row: 0},
-				Table:   &table,
-				visited: visited,
-			})
+			value, err := node.Evaluate(newScope(&table, &Cell{Column: 0, Row: 0}))
 			if err != nil {
 				t.Fatal(err)
 			}

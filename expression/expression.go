@@ -73,29 +73,6 @@ func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 				Node: result[0],
 			}), totalConsumed + 1, nil
 		}
-	case TokenExclamation:
-		if len(stack) == 0 {
-			return nil, 0, fmt.Errorf("malformed factorial expression")
-		}
-		top := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if b, ok := top.(BinaryExpressionNode); ok {
-			if b.Op.BinaryOpLess(token) {
-				return append(stack, BinaryExpressionNode{
-					Op:   b.Op,
-					Left: b.Left,
-					Right: FactorialNode{
-						Expression: b.Right,
-					},
-				}), 1, nil
-			}
-		}
-
-		stack = append(stack, FactorialNode{
-			Expression: top,
-		})
-		return stack, 1, nil
 	case TokenAdd, TokenSubtract, TokenMultiply, TokenDivide, TokenExponent:
 		node := BinaryExpressionNode{
 			Op: token,
@@ -141,7 +118,7 @@ func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 		return append(stack, node), 1 + consumed, nil
 	case TokenRightParenthesis:
 		return nil, 0, fmt.Errorf("unexpected right parenthesis at expression offest %d", token.Index)
+	default:
+		return nil, 0, fmt.Errorf("unexpected token at index %d %s", token.Index, token.Value)
 	}
-
-	return nil, 0, nil
 }

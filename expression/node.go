@@ -65,12 +65,6 @@ func (node BinaryExpressionNode) Evaluate(s Scope) (int, error) {
 		return left - right, nil
 	case TokenMultiply:
 		return left * right, nil
-	case TokenExponent:
-		res := 1
-		for i := 0; i < right; i++ {
-			res *= left
-		}
-		return res, nil
 	case TokenDivide:
 		if right == 0 {
 			return 0, fmt.Errorf("could not divide by zero")
@@ -79,28 +73,6 @@ func (node BinaryExpressionNode) Evaluate(s Scope) (int, error) {
 	default:
 		return 0, fmt.Errorf("unknown binary operator %s", node.Op.Value)
 	}
-}
-
-type FactorialNode struct {
-	Expression Node
-}
-
-func (node FactorialNode) String() string {
-	return fmt.Sprintf("%s!", node.Expression)
-}
-
-func (node FactorialNode) Evaluate(scope Scope) (int, error) {
-	n, err := node.Expression.Evaluate(scope)
-	if err != nil {
-		return 0, err
-	}
-	if n > 20 {
-		return 0, fmt.Errorf("n! where n > 20 is too large")
-	}
-	for i := n - 1; i >= 2; i-- {
-		n *= i
-	}
-	return n, nil
 }
 
 type ParenNode struct {
