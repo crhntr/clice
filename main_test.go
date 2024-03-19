@@ -1,6 +1,10 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/crhntr/clice/expression"
+)
 
 func Test_parse(t *testing.T) {
 	for _, tt := range []struct {
@@ -100,13 +104,13 @@ func Test_parse(t *testing.T) {
 		},
 	} {
 		t.Run(tt.Name, func(t *testing.T) {
-			tokens, err := tokenize(tt.Expression)
+			tokens, err := expression.Tokens(tt.Expression)
 			if err != nil {
 				t.Fatal(err)
 			}
 			table := NewTable(10, 10)
-			table.Cells = []Cell{{Column: 0, Row: 1, Value: 100, Expression: IntegerNode{Value: 100}}}
-			exp, _, err := parse(tokens, 0, 10-1, 10-1)
+			table.Cells = []Cell{{Column: 0, Row: 1, Value: 100, Expression: expression.IntegerNode{Value: 100}}}
+			exp, err := expression.Parse(tokens, 0)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,18 +125,6 @@ func Test_parse(t *testing.T) {
 
 			if value != tt.Result {
 				t.Errorf("expected %d but got %d", tt.Result, value)
-			}
-		})
-	}
-}
-
-func Test_columnLabels(t *testing.T) {
-	for i := 0; i < 1000; i++ {
-		label := columnLabel(i)
-		t.Run(label, func(t *testing.T) {
-			result := columnNumber(label)
-			if result != i {
-				t.Errorf("expected %d got %d", i, result)
 			}
 		})
 	}

@@ -10,12 +10,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"sync"
-	"unicode"
+
+	"github.com/crhntr/clice/expression"
 )
 
 //go:embed index.html.template
@@ -75,7 +75,7 @@ func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
 	server.mut.RLock()
 	defer server.mut.RUnlock()
 
-	column, row, err := parseCellID(req.PathValue("id"), server.table.ColumnCount-1, server.table.RowCount-1)
+	column, row, err := expression.CellCoordinates(req.PathValue("id"))
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
@@ -163,7 +163,7 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		if !strings.HasPrefix(key, "cell-") {
 			continue
 		}
-		column, row, err := parseCellID(key, server.table.ColumnCount-1, server.table.RowCount-1)
+		column, row, err := expression.CellCoordinates(key)
 		if err != nil {
 			http.Error(res, err.Error(), http.StatusBadRequest)
 			return
@@ -171,18 +171,18 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 
 		cell := server.cellPointer(column, row)
 		cell.Error = ""
-		cell.input = normalizeExpression(value[0])
+		cell.input = expression.Normalize(value[0])
 
-		var expression ExpressionNode
+		var node expression.Node
 		if cell.input != "" {
-			expression, err = newExpression(cell.input, server.table.ColumnCount-1, server.table.RowCount-1)
+			node, err = expression.New(cell.input)
 			if err != nil {
 				cell.Error = err.Error()
 				continue
 			}
-			cell.input = expression.String()
+			cell.input = node.String()
 		}
-		cell.Expression = expression
+		cell.Expression = node
 	}
 
 	err := server.table.calculateValues()
@@ -211,10 +211,6 @@ func (server *server) cellPointer(column, row int) *Cell {
 	return cell
 }
 
-func normalizeExpression(in string) string {
-	return strings.TrimSpace(strings.ToUpper(in))
-}
-
 type Column struct {
 	Number int
 }
@@ -233,14 +229,6 @@ func columnLabel(n int) string {
 	return result
 }
 
-func columnNumber(label string) int {
-	result := 0
-	for _, char := range label {
-		result = result*26 + int(char) - 64
-	}
-	return result - 1
-}
-
 type Row struct {
 	Number int
 }
@@ -254,7 +242,7 @@ type Cell struct {
 	Column int
 
 	Expression,
-	SavedExpression ExpressionNode
+	SavedExpression expression.Node
 	Value,
 	SavedValue int
 
@@ -296,11 +284,11 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 	table.RowCount = encoded.RowCount
 	table.ColumnCount = encoded.ColumnCount
 	for _, cell := range encoded.Cells {
-		column, row, err := parseCellID(cell.ID, table.ColumnCount-1, table.RowCount-1)
+		column, row, err := expression.CellCoordinates(cell.ID)
 		if err != nil {
 			return err
 		}
-		exp, err := newExpression(cell.Expression, table.ColumnCount-1, table.RowCount-1)
+		exp, err := expression.New(cell.Expression)
 		if err != nil {
 			return err
 		}
@@ -392,29 +380,6 @@ func (table *Table) calculateValues() error {
 	return nil
 }
 
-var identifierPattern = regexp.MustCompile("(?P<column>[A-Z]+)(?P<row>[0-9]+)")
-
-func parseCellID(in string, maxColumn, maxRow int) (int, int, error) {
-	in = strings.TrimPrefix(in, "cell-")
-	if !identifierPattern.MatchString(in) {
-		return 0, 0, fmt.Errorf("unexpected identifier pattern expected something like A4")
-	}
-	parts := identifierPattern.FindStringSubmatch(in)
-	columnName := parts[identifierPattern.SubexpIndex("column")]
-	row, err := strconv.Atoi(parts[identifierPattern.SubexpIndex("row")])
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to parse row number: %w", err)
-	}
-	if row > maxRow {
-		return 0, 0, fmt.Errorf("row number %d out of range it must be greater than 0 and less than or equal to %d", row, maxRow)
-	}
-	column := columnNumber(columnName)
-	if column > maxColumn {
-		return 0, 0, fmt.Errorf("column %s out of range it must be greater than or equal to %s and less than or equal to %s", columnName, columnLabel(0), columnLabel(maxColumn))
-	}
-	return column, row, nil
-}
-
 func (table *Table) saveCellChanges() {
 	for i := range table.Cells {
 		table.Cells[i].SavedValue = table.Cells[i].Value
@@ -427,298 +392,6 @@ func (table *Table) revertCellChanges() {
 		table.Cells[i].Value = table.Cells[i].SavedValue
 		table.Cells[i].Expression = table.Cells[i].SavedExpression
 	}
-}
-
-type Token struct {
-	Type  TokenType
-	Value string
-	Index int
-}
-
-func (token Token) BinaryOpLess(other Token) bool {
-	return token.Type < other.Type
-}
-
-type TokenType int
-
-const (
-	TokenNumber TokenType = iota
-	TokenAdd
-	TokenSubtract
-	TokenMultiply
-	TokenDivide
-	TokenExponent
-	TokenExclamation
-	TokenLeftParenthesis
-	TokenRightParenthesis
-	TokenIdentifier
-)
-
-func tokenize(input string) ([]Token, error) {
-	var tokens []Token
-
-	for i := 0; i < len(input); i++ {
-		c := rune(input[i])
-
-		if unicode.IsDigit(c) {
-			start := i
-			dotCount := 0
-			for i < len(input) && (unicode.IsDigit(rune(input[i])) || (dotCount == 0 && input[i] == '.')) {
-				if input[i] == '.' {
-					dotCount++
-				}
-				i++
-			}
-			tokens = append(tokens, Token{Index: start, Type: TokenNumber, Value: input[start:i]})
-			i--
-		} else if c == '+' {
-			tokens = append(tokens, Token{Index: i, Type: TokenAdd, Value: "+"})
-		} else if c == '!' {
-			tokens = append(tokens, Token{Index: i, Type: TokenExclamation, Value: "!"})
-		} else if c == '-' {
-			tokens = append(tokens, Token{Index: i, Type: TokenSubtract, Value: "-"})
-		} else if c == '*' {
-			tokens = append(tokens, Token{Index: i, Type: TokenMultiply, Value: "*"})
-		} else if c == '/' {
-			tokens = append(tokens, Token{Index: i, Type: TokenDivide, Value: "/"})
-		} else if c == '^' {
-			tokens = append(tokens, Token{Index: i, Type: TokenExponent, Value: "^"})
-		} else if c == '(' {
-			tokens = append(tokens, Token{Index: i, Type: TokenLeftParenthesis, Value: "("})
-		} else if c == ')' {
-			tokens = append(tokens, Token{Index: i, Type: TokenRightParenthesis, Value: ")"})
-		} else if unicode.IsSpace(c) {
-			continue
-		} else if unicode.IsLetter(rune(input[i])) {
-			start := i
-			for i < len(input) && (rune(input[i]) == '_' || unicode.IsLetter(rune(input[i])) || unicode.IsDigit(rune(input[i]))) {
-				i++
-			}
-			tokens = append(tokens, Token{Index: start, Type: TokenIdentifier, Value: input[start:i]})
-			i--
-		}
-	}
-
-	return tokens, nil
-}
-
-type ExpressionNode interface {
-	fmt.Stringer
-}
-
-func newExpression(in string, maxColumn, maxRow int) (ExpressionNode, error) {
-	expressionText := normalizeExpression(in)
-	tokens, err := tokenize(expressionText)
-	if err != nil {
-		return nil, err
-	}
-	expression, _, err := parse(tokens, 0, maxColumn, maxRow)
-	if err != nil {
-		return nil, err
-	}
-	return expression, nil
-}
-
-type IdentifierNode struct {
-	Token Token
-
-	Row, Column int
-}
-
-func (node IdentifierNode) String() string {
-	return node.Token.Value
-}
-
-type IntegerNode struct {
-	Token Token
-	Value int
-}
-
-func (node IntegerNode) String() string {
-	return node.Token.Value
-}
-
-type BinaryExpressionNode struct {
-	Op          Token
-	Left, Right ExpressionNode
-}
-
-func (node BinaryExpressionNode) String() string {
-	return fmt.Sprintf("%s %s %s", node.Left.String(), node.Op.Value, node.Right.String())
-}
-
-type VariableNode struct {
-	Identifier Token
-}
-
-func (node VariableNode) String() string {
-	return fmt.Sprintf("%s", node.Identifier.Value)
-}
-
-type FactorialNode struct {
-	Expression ExpressionNode
-}
-
-func (node FactorialNode) String() string {
-	return fmt.Sprintf("%s!", node.Expression)
-}
-
-type ParenNode struct {
-	Start, End Token
-	Node       ExpressionNode
-}
-
-func (node ParenNode) String() string {
-	return fmt.Sprintf("(%s)", node.Node)
-}
-
-func parse(tokens []Token, i, maxColumn, maxRow int) (ExpressionNode, int, error) {
-	var (
-		stack []ExpressionNode
-	)
-	for {
-		result, consumed, err := parseNodes(stack, tokens, i, maxColumn, maxRow)
-		if err != nil {
-			return nil, consumed + i, err
-		}
-		i += consumed
-		stack = result
-		if i < len(tokens) {
-			continue
-		}
-		if len(stack) < 1 {
-			return nil, i, fmt.Errorf("parsing failed to return an expression")
-		}
-		if len(stack) > 1 {
-			return nil, i, fmt.Errorf("failed build parse tree multiple %d nodes still on stack: %#v", len(stack)-1, stack)
-		}
-		return stack[0], i, nil
-	}
-}
-
-func parseNodes(stack []ExpressionNode, tokens []Token, i, maxColumn, maxRow int) ([]ExpressionNode, int, error) {
-	if i >= len(tokens) {
-		return nil, i, nil
-	}
-
-	token := tokens[i]
-
-	switch token.Type {
-	case TokenNumber:
-		n, err := strconv.Atoi(token.Value)
-		if err != nil {
-			return nil, 1, fmt.Errorf("failed to parse number  %s at expression offset %d: %w", token.Value, token.Index, err)
-		}
-		return append(stack, IntegerNode{Token: token, Value: n}), 1, nil
-	case TokenIdentifier:
-		switch token.Value {
-		case RowIdent, ColumnIdent, MaxRowIdent, MaxColumnIdent, MinRowIdent, MinColumnIdent:
-			return append(stack, VariableNode{Identifier: token}), 1, nil
-		default:
-			column, row, err := parseCellID(token.Value, maxColumn, maxRow)
-			if err != nil {
-				return nil, 0, err
-			}
-			return append(stack, IdentifierNode{Token: token, Row: row, Column: column}), 1, nil
-		}
-	case TokenLeftParenthesis:
-		var (
-			totalConsumed = 1
-			parenStack    []ExpressionNode
-		)
-		i += 1
-		for {
-			result, consumed, err := parseNodes(parenStack, tokens, i, maxColumn, maxRow)
-			if err != nil {
-				return nil, 0, err
-			}
-			totalConsumed += consumed
-			i += consumed
-			if i >= len(tokens) {
-				return nil, 0, fmt.Errorf("parenthesis at expression offset %d is missing closing parenthesis", token.Index)
-			}
-			if tokens[i].Type != TokenRightParenthesis {
-				parenStack = result
-				continue
-			}
-			if len(result) == 0 {
-				return nil, 0, fmt.Errorf("parentheses expression is empty")
-			}
-			return append(stack, ParenNode{
-				Node: result[0],
-			}), totalConsumed + 1, nil
-		}
-	case TokenExclamation:
-		if len(stack) == 0 {
-			return nil, 0, fmt.Errorf("malformed factorial expression")
-		}
-		top := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-
-		if b, ok := top.(BinaryExpressionNode); ok {
-			if b.Op.BinaryOpLess(token) {
-				return append(stack, BinaryExpressionNode{
-					Op:   b.Op,
-					Left: b.Left,
-					Right: FactorialNode{
-						Expression: b.Right,
-					},
-				}), 1, nil
-			}
-		}
-
-		stack = append(stack, FactorialNode{
-			Expression: top,
-		})
-		return stack, 1, nil
-	case TokenAdd, TokenSubtract, TokenMultiply, TokenDivide, TokenExponent:
-		node := BinaryExpressionNode{
-			Op: token,
-		}
-
-		if len(stack) == 0 {
-			if token.Type != TokenSubtract {
-				return stack, 0, fmt.Errorf("binary expression for operator at index %d missing left hand side", token.Index)
-			}
-			node.Left = IntegerNode{Value: 0}
-		} else {
-			node.Left = stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-		}
-
-		rightExpression, consumed, err := parseNodes(nil, tokens, i+1, maxColumn, maxRow)
-		if err != nil {
-			return nil, 1 + consumed, err
-		}
-		if len(rightExpression) != 1 {
-			return stack, 0, fmt.Errorf("weird right hand expression after operator at offet %d", token.Index)
-		}
-		node.Right = rightExpression[0]
-
-		if leftBinNode, ok := node.Left.(BinaryExpressionNode); ok {
-			if leftBinNode.Op.BinaryOpLess(node.Op) {
-				leftLeft := leftBinNode.Left
-				leftRight := leftBinNode.Right
-				rightNode := node.Right
-
-				return append(stack, BinaryExpressionNode{
-					Op:   leftBinNode.Op,
-					Left: leftLeft,
-					Right: BinaryExpressionNode{
-						Op:    token,
-						Left:  leftRight,
-						Right: rightNode,
-					},
-				}), 1 + consumed, nil
-			}
-		}
-
-		return append(stack, node), 1 + consumed, nil
-	case TokenRightParenthesis:
-		return nil, 0, fmt.Errorf("unexpected right parenthesis at expression offest %d", token.Index)
-	}
-
-	return nil, 0, nil
 }
 
 type visit struct {
@@ -749,41 +422,32 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 	return nil
 }
 
-const (
-	RowIdent       = "ROW"
-	ColumnIdent    = "COLUMN"
-	MaxRowIdent    = "MAX_ROW"
-	MaxColumnIdent = "MAX_COLUMN"
-	MinRowIdent    = "MIN_ROW"
-	MinColumnIdent = "MIN_COLUMN"
-)
-
-func evaluate(table *Table, cell *Cell, visited visitSet, expressionNode ExpressionNode) (int, error) {
+func evaluate(table *Table, cell *Cell, visited visitSet, expressionNode expression.Node) (int, error) {
 	switch node := expressionNode.(type) {
-	case IdentifierNode:
+	case expression.IdentifierNode:
 		cell := table.Cell(node.Column, node.Row)
 		err := cell.evaluate(table, visited)
 		return cell.Value, err
-	case IntegerNode:
-		return node.Value, nil
-	case ParenNode:
+	case expression.IntegerNode:
+		return node.Evaluate()
+	case expression.ParenNode:
 		return evaluate(table, cell, visited, node.Node)
-	case VariableNode:
+	case expression.VariableNode:
 		switch node.Identifier.Value {
-		case RowIdent:
+		case expression.RowIdent:
 			return cell.Row, nil
-		case ColumnIdent:
+		case expression.ColumnIdent:
 			return cell.Column, nil
-		case MaxRowIdent:
+		case expression.MaxRowIdent:
 			return table.RowCount - 1, nil
-		case MaxColumnIdent:
+		case expression.MaxColumnIdent:
 			return table.ColumnCount - 1, nil
-		case MinRowIdent, MinColumnIdent:
+		case expression.MinRowIdent, expression.MinColumnIdent:
 			return 0, nil
 		default:
 			return 0, fmt.Errorf("unknown variable %s", node.Identifier.Value)
 		}
-	case FactorialNode:
+	case expression.FactorialNode:
 		n, err := evaluate(table, cell, visited, node.Expression)
 		if err != nil {
 			return 0, err
@@ -795,7 +459,7 @@ func evaluate(table *Table, cell *Cell, visited visitSet, expressionNode Express
 			n *= i
 		}
 		return n, nil
-	case BinaryExpressionNode:
+	case expression.BinaryExpressionNode:
 		leftResult, err := evaluate(table, cell, visited, node.Left)
 		if err != nil {
 			return 0, err
@@ -805,19 +469,19 @@ func evaluate(table *Table, cell *Cell, visited visitSet, expressionNode Express
 			return 0, err
 		}
 		switch node.Op.Type {
-		case TokenAdd:
+		case expression.TokenAdd:
 			return leftResult + rightResult, nil
-		case TokenSubtract:
+		case expression.TokenSubtract:
 			return leftResult - rightResult, nil
-		case TokenMultiply:
+		case expression.TokenMultiply:
 			return leftResult * rightResult, nil
-		case TokenExponent:
+		case expression.TokenExponent:
 			res := 1
 			for i := 0; i < rightResult; i++ {
 				res *= leftResult
 			}
 			return res, nil
-		case TokenDivide:
+		case expression.TokenDivide:
 			if rightResult == 0 {
 				return 0, fmt.Errorf("could not divide by zero")
 			}
