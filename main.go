@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/ast"
 	"go/constant"
 	"html/template"
 	"io"
@@ -177,7 +178,12 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 				cell.Error = err.Error()
 				continue
 			}
-			cell.input = node.String()
+			s, err := expression.Sprint(node)
+			if err != nil {
+				cell.Error = err.Error()
+				continue
+			}
+			cell.input = s
 		}
 		cell.Expression = node
 	}
@@ -237,7 +243,7 @@ type Cell struct {
 	Column int
 
 	Expression,
-	SavedExpression expression.Node
+	SavedExpression ast.Expr
 	Value,
 	SavedValue constant.Value
 
@@ -247,7 +253,11 @@ type Cell struct {
 
 func (cell *Cell) ExpressionText() string {
 	if cell.Expression != nil && cell.Error == "" {
-		return cell.Expression.String()
+		s, err := expression.Sprint(cell.Expression)
+		if err != nil {
+			return cell.input
+		}
+		return s
 	}
 	return cell.input
 }
@@ -258,9 +268,13 @@ type EncodedCell struct {
 }
 
 func (cell *Cell) MarshalJSON() ([]byte, error) {
+	s, err := expression.Sprint(cell.Expression)
+	if err != nil {
+		return nil, err
+	}
 	return json.Marshal(EncodedCell{
 		ID:         strings.TrimPrefix(cell.ID(), "cell-"),
-		Expression: cell.SavedExpression.String(),
+		Expression: s,
 	})
 }
 
@@ -418,7 +432,7 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 		cell.Value = constant.MakeInt64(0)
 		return nil
 	}
-	result, err := cell.Expression.Evaluate(newScope(table, cell))
+	result, err := expression.Evaluate(newScope(table, cell), cell.Expression)
 	if err != nil {
 		return err
 	}
@@ -476,11 +490,11 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 		if cell.Expression == nil {
 			return constant.MakeInt64(0), nil
 		}
-		return cell.Expression.Evaluate(&Scope{
+		return expression.Evaluate(&Scope{
 			cell:    cell,
 			Table:   s.Table,
 			visited: s.visited,
-		})
+		}, cell.Expression)
 	}
 }
 

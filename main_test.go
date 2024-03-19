@@ -102,14 +102,19 @@ func Test_parse(t *testing.T) {
 	} {
 		t.Run(tt.Name, func(t *testing.T) {
 			table := NewTable(10, 10)
-			table.Cells = []Cell{{Column: 0, Row: 1, Value: constant.MakeInt64(100), Expression: expression.ValueNode{Value: constant.MakeInt64(100)}}}
+			const otherVal = 100
+			e, err := expression.New(strconv.Itoa(otherVal))
+			if err != nil {
+				t.Fatal(err)
+			}
+			table.Cells = []Cell{{Column: 0, Row: 1, Value: constant.MakeInt64(otherVal), Expression: e}}
 
 			node, err := expression.New(tt.Expression)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			value, err := node.Evaluate(newScope(&table, &Cell{Column: 0, Row: 0}))
+			value, err := expression.Evaluate(newScope(&table, &Cell{Column: 0, Row: 0}), node)
 			if err != nil {
 				t.Fatal(err)
 			}

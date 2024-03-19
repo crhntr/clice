@@ -1,86 +1,64 @@
 package expression
 
 import (
+	"bytes"
 	"fmt"
+	"go/ast"
 	"go/constant"
+	"go/parser"
+	"go/printer"
 	"go/token"
 )
+
+type Node = ast.Expr
 
 type Scope interface {
 	Resolve(string) (constant.Value, error)
 }
 
-type Node interface {
-	fmt.Stringer
-	Evaluate(s Scope) (constant.Value, error)
+func New(in string) (ast.Expr, error) {
+	return parser.ParseExpr(in)
 }
 
-func New(in string) (Node, error) {
-	tokens, err := Tokens(in)
-	if err != nil {
-		return nil, err
-	}
-	expression, err := Parse(tokens)
-	if err != nil {
-		return nil, err
-	}
-	return expression, nil
+func Sprint(expr ast.Expr) (string, error) {
+	set := token.NewFileSet()
+	var buf bytes.Buffer
+	err := printer.Fprint(&buf, set, expr)
+	return buf.String(), err
 }
 
-type IdentifierNode struct {
-	Token Token
-}
+func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = fmt.Errorf("panic: %v", r)
+		}
+	}()
 
-func (node IdentifierNode) String() string { return node.Token.Value }
-func (node IdentifierNode) Evaluate(s Scope) (constant.Value, error) {
-	return s.Resolve(node.Token.Value)
-}
-
-type ValueNode struct {
-	Token Token
-	Value constant.Value
-}
-
-func (node ValueNode) String() string                         { return node.Token.Value }
-func (node ValueNode) Evaluate(Scope) (constant.Value, error) { return node.Value, nil }
-
-type BinaryExpressionNode struct {
-	Op          Token
-	Left, Right Node
-}
-
-func (node BinaryExpressionNode) String() string {
-	return fmt.Sprintf("%s %s %s", node.Left.String(), node.Op.Value, node.Right.String())
-}
-
-func (node BinaryExpressionNode) Evaluate(s Scope) (constant.Value, error) {
-	left, err := node.Left.Evaluate(s)
-	if err != nil {
-		return nil, err
-	}
-	right, err := node.Right.Evaluate(s)
-	if err != nil {
-		return nil, err
-	}
-
-	switch node.Op.Type {
-	case TokenAdd:
-		return constant.BinaryOp(left, token.ADD, right), nil
-	case TokenSubtract:
-		return constant.BinaryOp(left, token.SUB, right), nil
-	case TokenMultiply:
-		return constant.BinaryOp(left, token.MUL, right), nil
-	case TokenDivide:
-		return constant.BinaryOp(left, token.QUO, right), nil
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		cv := constant.MakeFromLiteral(e.Value, e.Kind, 0)
+		return cv, nil
+	case *ast.UnaryExpr:
+		x, err := Evaluate(scope, e.X)
+		if err != nil {
+			return nil, err
+		}
+		return constant.UnaryOp(e.Op, x, 0), nil
+	case *ast.BinaryExpr:
+		left, err := Evaluate(scope, e.X)
+		if err != nil {
+			return nil, err
+		}
+		right, err := Evaluate(scope, e.Y)
+		if err != nil {
+			return nil, err
+		}
+		return constant.BinaryOp(left, e.Op, right), nil
+	case *ast.ParenExpr:
+		return Evaluate(scope, e.X)
+	case *ast.Ident:
+		return scope.Resolve(e.Name)
 	default:
-		return nil, fmt.Errorf("unknown binary operator %s", node.Op.Value)
+		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}
 }
-
-type ParenNode struct {
-	Start, End Token
-	Node       Node
-}
-
-func (node ParenNode) String() string                           { return fmt.Sprintf("(%s)", node.Node) }
-func (node ParenNode) Evaluate(s Scope) (constant.Value, error) { return node.Node.Evaluate(s) }
