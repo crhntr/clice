@@ -73,7 +73,7 @@ func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 				Node: result[0],
 			}), totalConsumed + 1, nil
 		}
-	case TokenAdd, TokenSubtract, TokenMultiply, TokenDivide, TokenExponent:
+	case TokenAdd, TokenSubtract, TokenMultiply, TokenDivide:
 		node := BinaryExpressionNode{
 			Op: token,
 		}
