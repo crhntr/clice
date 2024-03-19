@@ -2,6 +2,7 @@ package expression
 
 import (
 	"fmt"
+	"go/constant"
 	"strconv"
 )
 
@@ -39,11 +40,11 @@ func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 
 	switch token.Type {
 	case TokenNumber:
-		n, err := strconv.Atoi(token.Value)
+		n, err := strconv.ParseInt(token.Value, 10, 64)
 		if err != nil {
 			return nil, 1, fmt.Errorf("failed to Parse number  %s at expression offset %d: %w", token.Value, token.Index, err)
 		}
-		return append(stack, IntegerNode{Token: token, Value: n}), 1, nil
+		return append(stack, ValueNode{Token: token, Value: constant.MakeInt64(n)}), 1, nil
 	case TokenIdentifier:
 		return append(stack, IdentifierNode{Token: token}), 1, nil
 	case TokenLeftParenthesis:
@@ -82,7 +83,7 @@ func parse(stack []Node, tokens []Token, i int) ([]Node, int, error) {
 			if token.Type != TokenSubtract {
 				return stack, 0, fmt.Errorf("binary expression for operator at index %d missing left hand side", token.Index)
 			}
-			node.Left = IntegerNode{Value: 0}
+			node.Left = ValueNode{Value: nil}
 		} else {
 			node.Left = stack[len(stack)-1]
 			stack = stack[:len(stack)-1]

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"go/constant"
 	"html/template"
 	"io"
 	"log"
@@ -238,7 +239,7 @@ type Cell struct {
 	Expression,
 	SavedExpression expression.Node
 	Value,
-	SavedValue int
+	SavedValue constant.Value
 
 	input,
 	Error string
@@ -301,7 +302,7 @@ func (cell *Cell) String() string {
 	if cell.SavedExpression == nil {
 		return ""
 	}
-	return strconv.Itoa(cell.Value)
+	return cell.Value.String()
 }
 
 func (cell *Cell) IDPathParam() string {
@@ -414,7 +415,7 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 	}
 	visited[v] = struct{}{}
 	if cell.Expression == nil {
-		cell.Value = 0
+		cell.Value = constant.MakeInt64(0)
 		return nil
 	}
 	result, err := cell.Expression.Evaluate(newScope(table, cell))
@@ -448,32 +449,32 @@ const (
 	MinColumnIdent = "MIN_COLUMN"
 )
 
-func (s *Scope) Resolve(ident string) (int, error) {
+func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	switch ident {
 	case RowIdent:
-		return s.cell.Row, nil
+		return constant.MakeInt64(int64(s.cell.Row)), nil
 	case ColumnIdent:
-		return s.cell.Column, nil
+		return constant.MakeInt64(int64(s.cell.Column)), nil
 	case MaxRowIdent:
-		return s.Table.RowCount - 1, nil
+		return constant.MakeInt64(int64(s.Table.RowCount - 1)), nil
 	case MaxColumnIdent:
-		return s.Table.ColumnCount - 1, nil
+		return constant.MakeInt64(int64(s.Table.ColumnCount - 1)), nil
 	case MinRowIdent, MinColumnIdent:
-		return 0, nil
+		return constant.MakeInt64(0), nil
 	default:
 		if !identifierPattern.MatchString(ident) {
-			return 0, fmt.Errorf("unknown variable %s", ident)
+			return nil, fmt.Errorf("unknown variable %s", ident)
 		}
 		column, row, err := cellCoordinates(ident)
 		if err != nil {
-			return 0, err
+			return nil, err
 		}
 		if s.visited.check(visit{row: row, colum: column}) {
-			return 0, fmt.Errorf("recursive reference to %s%d", columnLabel(column), row)
+			return nil, fmt.Errorf("recursive reference to %s%d", columnLabel(column), row)
 		}
 		cell := s.Table.Cell(column, row)
 		if cell.Expression == nil {
-			return 0, nil
+			return constant.MakeInt64(0), nil
 		}
 		return cell.Expression.Evaluate(&Scope{
 			cell:    cell,

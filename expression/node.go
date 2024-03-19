@@ -2,15 +2,17 @@ package expression
 
 import (
 	"fmt"
+	"go/constant"
+	"go/token"
 )
 
 type Scope interface {
-	Resolve(string) (int, error)
+	Resolve(string) (constant.Value, error)
 }
 
 type Node interface {
 	fmt.Stringer
-	Evaluate(s Scope) (int, error)
+	Evaluate(s Scope) (constant.Value, error)
 }
 
 func New(in string) (Node, error) {
@@ -29,16 +31,18 @@ type IdentifierNode struct {
 	Token Token
 }
 
-func (node IdentifierNode) String() string                { return node.Token.Value }
-func (node IdentifierNode) Evaluate(s Scope) (int, error) { return s.Resolve(node.Token.Value) }
-
-type IntegerNode struct {
-	Token Token
-	Value int
+func (node IdentifierNode) String() string { return node.Token.Value }
+func (node IdentifierNode) Evaluate(s Scope) (constant.Value, error) {
+	return s.Resolve(node.Token.Value)
 }
 
-func (node IntegerNode) String() string              { return node.Token.Value }
-func (node IntegerNode) Evaluate(Scope) (int, error) { return node.Value, nil }
+type ValueNode struct {
+	Token Token
+	Value constant.Value
+}
+
+func (node ValueNode) String() string                         { return node.Token.Value }
+func (node ValueNode) Evaluate(Scope) (constant.Value, error) { return node.Value, nil }
 
 type BinaryExpressionNode struct {
 	Op          Token
@@ -49,29 +53,27 @@ func (node BinaryExpressionNode) String() string {
 	return fmt.Sprintf("%s %s %s", node.Left.String(), node.Op.Value, node.Right.String())
 }
 
-func (node BinaryExpressionNode) Evaluate(s Scope) (int, error) {
+func (node BinaryExpressionNode) Evaluate(s Scope) (constant.Value, error) {
 	left, err := node.Left.Evaluate(s)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	right, err := node.Right.Evaluate(s)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
+
 	switch node.Op.Type {
 	case TokenAdd:
-		return left + right, nil
+		return constant.BinaryOp(left, token.ADD, right), nil
 	case TokenSubtract:
-		return left - right, nil
+		return constant.BinaryOp(left, token.SUB, right), nil
 	case TokenMultiply:
-		return left * right, nil
+		return constant.BinaryOp(left, token.MUL, right), nil
 	case TokenDivide:
-		if right == 0 {
-			return 0, fmt.Errorf("could not divide by zero")
-		}
-		return left / right, nil
+		return constant.BinaryOp(left, token.QUO, right), nil
 	default:
-		return 0, fmt.Errorf("unknown binary operator %s", node.Op.Value)
+		return nil, fmt.Errorf("unknown binary operator %s", node.Op.Value)
 	}
 }
 
@@ -80,5 +82,5 @@ type ParenNode struct {
 	Node       Node
 }
 
-func (node ParenNode) String() string                { return fmt.Sprintf("(%s)", node.Node) }
-func (node ParenNode) Evaluate(s Scope) (int, error) { return node.Node.Evaluate(s) }
+func (node ParenNode) String() string                           { return fmt.Sprintf("(%s)", node.Node) }
+func (node ParenNode) Evaluate(s Scope) (constant.Value, error) { return node.Node.Evaluate(s) }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"go/constant"
+	"strconv"
 	"testing"
 
 	"github.com/crhntr/clice/expression"
@@ -100,7 +102,7 @@ func Test_parse(t *testing.T) {
 	} {
 		t.Run(tt.Name, func(t *testing.T) {
 			table := NewTable(10, 10)
-			table.Cells = []Cell{{Column: 0, Row: 1, Value: 100, Expression: expression.IntegerNode{Value: 100}}}
+			table.Cells = []Cell{{Column: 0, Row: 1, Value: constant.MakeInt64(100), Expression: expression.ValueNode{Value: constant.MakeInt64(100)}}}
 
 			node, err := expression.New(tt.Expression)
 			if err != nil {
@@ -112,7 +114,7 @@ func Test_parse(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			if value != tt.Result {
+			if value.String() != strconv.Itoa(tt.Result) {
 				t.Errorf("expected %d but got %d", tt.Result, value)
 			}
 		})
