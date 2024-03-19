@@ -17,6 +17,9 @@ type Scope interface {
 }
 
 func New(in string) (ast.Expr, error) {
+	if in == "" {
+		return nil, nil
+	}
 	return parser.ParseExpr(in)
 }
 
@@ -58,6 +61,8 @@ func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
 		return Evaluate(scope, e.X)
 	case *ast.Ident:
 		return scope.Resolve(e.Name)
+	case nil:
+		return constant.MakeInt64(0), nil
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}
