@@ -151,12 +151,12 @@ func closeAndIgnoreError(c io.Closer) {
 }
 
 func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
-	server.mut.Lock()
-	defer server.mut.Unlock()
 	if err := req.ParseForm(); err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
+	server.mut.Lock()
+	defer server.mut.Unlock()
 	for key, value := range req.Form {
 		if !strings.HasPrefix(key, "cell-") {
 			continue
@@ -168,7 +168,7 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		}
 		cell := server.cellPointer(column, row)
 		cell.Error = ""
-		cell.input = expression.Normalize(value[0])
+		cell.input = normalize(value[0])
 		var node expression.Node
 		if cell.input != "" {
 			node, err = expression.New(cell.input)
@@ -394,6 +394,15 @@ type visit struct {
 
 type visitSet map[visit]struct{}
 
+func (set visitSet) visit(row, column int) bool {
+	_, visited := set[visit{colum: column, row: row}]
+	if visited {
+		return true
+	}
+	set[visit{colum: column, row: row}] = struct{}{}
+	return false
+}
+
 func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 	v := visit{
 		colum: cell.Column,
@@ -455,6 +464,9 @@ func (s *Scope) Resolve(ident string) (int, error) {
 		if err != nil {
 			return 0, err
 		}
+		if s.visited.visit(row, column) {
+			return 0, fmt.Errorf("recursive reference to %s%d", columnLabel(column), row)
+		}
 		cell := s.Table.Cell(column, row)
 		if cell.Expression == nil {
 			return 0, nil
@@ -496,4 +508,8 @@ func columnNumber(label string) int {
 		result = result*26 + int(char) - 64
 	}
 	return result - 1
+}
+
+func normalize(in string) string {
+	return strings.TrimSpace(strings.ToUpper(in))
 }

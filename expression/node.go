@@ -14,12 +14,11 @@ type Node interface {
 }
 
 func New(in string) (Node, error) {
-	expressionText := Normalize(in)
-	tokens, err := Tokens(expressionText)
+	tokens, err := Tokens(in)
 	if err != nil {
 		return nil, err
 	}
-	expression, err := Parse(tokens, 0)
+	expression, err := Parse(tokens)
 	if err != nil {
 		return nil, err
 	}

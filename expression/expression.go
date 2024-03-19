@@ -3,17 +3,13 @@ package expression
 import (
 	"fmt"
 	"strconv"
-	"strings"
 )
 
-func Normalize(in string) string {
-	return strings.TrimSpace(strings.ToUpper(in))
-}
-
-func Parse(tokens []Token, i int) (Node, error) {
+func Parse(tokens []Token) (Node, error) {
 	var (
 		stack []Node
 	)
+	i := 0
 	for {
 		result, consumed, err := parse(stack, tokens, i)
 		if err != nil {

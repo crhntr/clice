@@ -110,7 +110,7 @@ func Test_parse(t *testing.T) {
 			}
 			table := NewTable(10, 10)
 			table.Cells = []Cell{{Column: 0, Row: 1, Value: 100, Expression: expression.IntegerNode{Value: 100}}}
-			node, err := expression.Parse(tokens, 0)
+			node, err := expression.Parse(tokens)
 			if err != nil {
 				t.Fatal(err)
 			}
