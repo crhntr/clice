@@ -1,7 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"html/template"
+	"io"
+	"math"
+	"math/big"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -174,6 +179,32 @@ func TestServer(t *testing.T) {
 				}
 			}
 		})
+		t.Run("parsing a huge cell value fails", func(t *testing.T) {
+			s := setup(1, 2)
+			{ // setup some cell to reference
+				n := new(big.Int)
+				n = n.SetInt64(math.MaxInt64)
+				n = n.Add(n, big.NewInt(1))
+				id := "cell-A" + n.String()
+				t.Log(id)
+				rec := setCellExpressionRequest(t, s, id, "100")
+				res := rec.Result()
+				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+				buf, _ := io.ReadAll(res.Body)
+				assert.Contains(t, string(buf), "failed to Parse row number:")
+			}
+		})
+		t.Run("parsing a negative cell value", func(t *testing.T) {
+			s := setup(1, 2)
+			{ // setup some cell to reference
+				n := new(big.Int)
+				n = n.SetInt64(math.MinInt64)
+				n.Add(n, big.NewInt(1))
+				rec := setCellExpressionRequest(t, s, "cell-A-1", "100")
+				res := rec.Result()
+				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+			}
+		})
 		t.Run("updating referencing cells", func(t *testing.T) {
 			s := setup(1, 3)
 			{ // setup some cell to reference
@@ -209,6 +240,54 @@ func TestServer(t *testing.T) {
 			}
 		})
 	})
+
+	t.Run("upload", func(t *testing.T) {
+		t.Run("example file", func(t *testing.T) {
+			s := setup(1, 1)
+
+			{ // upload table.json
+				// language=json
+				tableJSON := `{
+  "rows": 3,
+  "columns": 2,
+  "cells": [
+    {"id": "A0", "ex": "100"},
+    {"id": "A1", "ex": "80"},
+	{"id": "B0", "ex": "(A0 + A1) / B1"},
+    {"id": "B1", "ex": "MAX_ROW"}
+  ]
+}`
+				rec := uploadJSONTableRequest(t, s, tableJSON)
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+
+				if out, _ := io.ReadAll(res.Body); t.Failed() {
+					t.Log(string(out))
+				}
+			}
+
+			{ // asser the values are calculated
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				rec := httptest.NewRecorder()
+				s.routes().ServeHTTP(rec, req)
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				document := domtest.Response(t, res)
+				if el := document.QuerySelector("#cell-A0"); assert.NotNil(t, el) {
+					assert.Contains(t, "100", el.TextContent())
+				}
+				if el := document.QuerySelector("#cell-A1"); assert.NotNil(t, el) {
+					assert.Contains(t, "80", el.TextContent())
+				}
+				if el := document.QuerySelector("#cell-B0"); assert.NotNil(t, el) {
+					assert.Contains(t, "90", el.TextContent())
+				}
+				if el := document.QuerySelector("#cell-B1"); assert.NotNil(t, el) {
+					assert.Contains(t, "2", el.TextContent())
+				}
+			}
+		})
+	})
 }
 
 func setCellExpressionRequest(t *testing.T, s *server, cell string, value string) *httptest.ResponseRecorder {
@@ -217,6 +296,21 @@ func setCellExpressionRequest(t *testing.T, s *server, cell string, value string
 		cell: []string{value},
 	}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, req)
+	return rec
+}
+
+func uploadJSONTableRequest(t *testing.T, s *server, tableJSON string) *httptest.ResponseRecorder {
+	t.Helper()
+	body := bytes.NewBuffer(nil)
+	writer := multipart.NewWriter(body)
+	w, err := writer.CreateFormFile("table.json", "table.json")
+	require.NoError(t, err)
+	_, _ = w.Write([]byte(tableJSON))
+	require.NoError(t, writer.Close())
+	req := httptest.NewRequest(http.MethodPost, "/table.json", body)
+	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rec := httptest.NewRecorder()
 	s.routes().ServeHTTP(rec, req)
 	return rec
