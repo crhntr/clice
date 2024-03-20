@@ -1,127 +1,223 @@
 package main
 
 import (
-	"go/constant"
-	"strconv"
+	"html/template"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 
-	"github.com/crhntr/clice/expression"
+	"github.com/crhntr/dom/domtest"
+	"golang.org/x/net/html/atom"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func Test_parse(t *testing.T) {
-	for _, tt := range []struct {
-		Name       string
-		Expression string
-		Result     int
-	}{
-		{
-			Name:       "just 1",
-			Expression: "1",
-			Result:     1,
-		},
-		{
-			Name:       "add",
-			Expression: "1 + 2",
-			Result:     3,
-		},
-		{
-			Name:       "subtract",
-			Expression: "1 - 2",
-			Result:     -1,
-		},
-		{
-			Name:       "multiply",
-			Expression: "2 * 3",
-			Result:     6,
-		},
-		{
-			Name:       "divide",
-			Expression: "6 / 2",
-			Result:     3,
-		},
-		{
-			Name:       "no space",
-			Expression: "8/2",
-			Result:     4,
-		},
-		{
-			Name:       "space around",
-			Expression: " 8/2 ",
-			Result:     4,
-		},
-		{
-			Name:       "cell in cells slice",
-			Expression: "A1",
-			Result:     100,
-		},
-		{
-			Name:       "cell not in cells slice",
-			Expression: "J9",
-			Result:     0,
-		},
-		{
-			Name:       "multiple multiply expressions",
-			Expression: "1 * 2 * 3",
-			Result:     6,
-		},
-		{
-			Name:       "precedence order",
-			Expression: "1 * 2 + 3",
-			Result:     5,
-		},
-		{
-			Name:       "non precedence order",
-			Expression: "1 + 2 * 3",
-			Result:     7,
-		},
-		{
-			Name:       "non precedence order on both sides",
-			Expression: "1 + 2 * 3 + 4",
-			Result:     11,
-		},
-		{
-			Name:       "number in parens",
-			Expression: "(1)",
-			Result:     1,
-		},
-		{
-			Name:       "two sets of parens in middle",
-			Expression: "(1 + 2) * (3 + 4)",
-			Result:     21,
-		},
-		{
-			Name:       "one set of parens with binary op with higher president",
-			Expression: "2 * (3 + 4)",
-			Result:     14,
-		},
-		{
-			Name:       "division has higher president over subtraction",
-			Expression: "100 - 6 / 3",
-			Result:     98,
-		},
-	} {
-		t.Run(tt.Name, func(t *testing.T) {
-			table := NewTable(10, 10)
-			const otherVal = 100
-			e, err := expression.New(strconv.Itoa(otherVal))
-			if err != nil {
-				t.Fatal(err)
-			}
-			table.Cells = []Cell{{Column: 0, Row: 1, Value: constant.MakeInt64(otherVal), Expression: e}}
+func TestServer(t *testing.T) {
+	var templates = template.Must(template.New("index.html.template").Parse(indexHTMLTemplate))
 
-			node, err := expression.New(tt.Expression)
-			if err != nil {
-				t.Fatal(err)
+	setup := func(columns, rows int) *server {
+		return &server{
+			table:     NewTable(columns, rows),
+			templates: templates,
+		}
+	}
+
+	t.Run("editing a cell", func(t *testing.T) {
+		t.Run("unknown cell", func(t *testing.T) {
+			s := setup(1, 1)
+
+			req := httptest.NewRequest(http.MethodGet, "/cell/peach1", nil)
+			rec := httptest.NewRecorder()
+			s.routes().ServeHTTP(rec, req)
+			res := rec.Result()
+
+			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+			// TODO: use assert.Equal(t, http.StatusNotFound, res.StatusCode)
+		})
+		t.Run("cell with expression", func(t *testing.T) {
+			s := setup(1, 1)
+
+			require.Equal(t, http.StatusOK, setCellExpressionRequest(t, s, "cell-A0", "100").Result().StatusCode)
+
+			req := httptest.NewRequest(http.MethodGet, "/cell/A0", nil)
+			rec := httptest.NewRecorder()
+			s.routes().ServeHTTP(rec, req)
+			res := rec.Result()
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+			elements := domtest.DocumentFragment(t, res.Body, atom.Tr)
+			require.Len(t, elements, 1)
+			cell := elements[0]
+
+			require.True(t, cell.Matches(`.cell`))
+
+			if assert.NotNil(t, cell) {
+				assert.Equal(t, "0", cell.GetAttribute("data-column-index"))
+				assert.Equal(t, "0", cell.GetAttribute("data-row-index"))
+				assert.Equal(t, "cell-A0", cell.GetAttribute("id"))
 			}
 
-			value, err := expression.Evaluate(newScope(&table, &Cell{Column: 0, Row: 0}), node)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if value.String() != strconv.Itoa(tt.Result) {
-				t.Errorf("expected %d but got %d", tt.Result, value)
+			if input := cell.QuerySelector(`input[type="text"]`); assert.NotNil(t, input) {
+				assert.Equal(t, "100", input.GetAttribute("value"))
+				assert.True(t, input.HasAttribute("autofocus"))
+				assert.NotZero(t, input.GetAttribute("aria-label"))
 			}
 		})
-	}
+		t.Run("empty table no cells", func(t *testing.T) {
+			s := setup(1, 1)
+
+			req := httptest.NewRequest(http.MethodGet, "/cell/A0", nil)
+			rec := httptest.NewRecorder()
+			s.routes().ServeHTTP(rec, req)
+			res := rec.Result()
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+			elements := domtest.DocumentFragment(t, res.Body, atom.Tr)
+			require.Len(t, elements, 1)
+			cell := elements[0]
+
+			require.True(t, cell.Matches(`.cell`))
+
+			if assert.NotNil(t, cell) {
+				assert.Equal(t, "0", cell.GetAttribute("data-column-index"))
+				assert.Equal(t, "0", cell.GetAttribute("data-row-index"))
+				assert.Equal(t, "cell-A0", cell.GetAttribute("id"))
+			}
+
+			if input := cell.QuerySelector(`input[type="text"]`); assert.NotNil(t, input) {
+				assert.Equal(t, "", input.GetAttribute("value"))
+				assert.True(t, input.HasAttribute("autofocus"))
+				assert.NotZero(t, input.GetAttribute("aria-label"))
+			}
+		})
+	})
+
+	t.Run("setting a cell expression literal", func(t *testing.T) {
+		t.Run("int", func(t *testing.T) {
+			s := setup(1, 1)
+
+			rec := setCellExpressionRequest(t, s, "cell-A0", "100")
+			res := rec.Result()
+			document := domtest.Response(t, res)
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+
+			cellElement := document.QuerySelector("#cell-A0")
+			require.NotNil(t, cellElement)
+			require.Equal(t, cellElement.TextContent(), "100")
+		})
+
+		t.Run("float", func(t *testing.T) {
+			s := setup(1, 1)
+
+			rec := setCellExpressionRequest(t, s, "cell-A0", "0.5")
+			res := rec.Result()
+			document := domtest.Response(t, res)
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+
+			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
+				assert.Equal(t, cellElement.TextContent(), "0.5")
+			}
+		})
+
+		t.Run("string", func(t *testing.T) {
+			t.Skip("need to remove up-casing of string literals")
+			s := setup(1, 1)
+
+			rec := setCellExpressionRequest(t, s, "cell-A0", `"Hello, world!"`)
+			res := rec.Result()
+			document := domtest.Response(t, res)
+
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+
+			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
+				assert.Equal(t, cellElement.TextContent(), `"Hello, world!"`)
+			}
+		})
+
+		t.Run("bool", func(t *testing.T) {
+			t.Skip("need to add literal boolean support")
+			s := setup(1, 1)
+
+			rec := setCellExpressionRequest(t, s, "cell-A0", "true")
+			res := rec.Result()
+			document := domtest.Response(t, res)
+			assert.Equal(t, http.StatusOK, res.StatusCode)
+
+			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
+				require.Equal(t, cellElement.TextContent(), "true")
+			}
+		})
+	})
+
+	t.Run("cell identifiers", func(t *testing.T) {
+		t.Run("simple cell reference", func(t *testing.T) {
+			s := setup(1, 2)
+			{ // setup some cell to reference
+				rec := setCellExpressionRequest(t, s, "cell-A0", "100")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+			}
+			{ // reference the cell
+				rec := setCellExpressionRequest(t, s, "cell-A1", "A0")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				document := domtest.Response(t, res)
+
+				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
+					assert.NotNil(t, cellElement)
+					assert.Equal(t, cellElement.TextContent(), `100`)
+				}
+				if cellElement := document.QuerySelector("#cell-A1"); assert.NotNil(t, cellElement) {
+					require.NotNil(t, cellElement)
+					require.Equal(t, cellElement.TextContent(), `100`)
+				}
+			}
+		})
+		t.Run("updating referencing cells", func(t *testing.T) {
+			s := setup(1, 3)
+			{ // setup some cell to reference
+				rec := setCellExpressionRequest(t, s, "cell-A0", "100")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+			}
+			{ // setup some referencing cell to reference
+				rec := setCellExpressionRequest(t, s, "cell-A1", "A0")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+			}
+			{ // setup some referencing cell to reference
+				rec := setCellExpressionRequest(t, s, "cell-A2", "A1")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+			}
+			{ // update the initial cell
+				rec := setCellExpressionRequest(t, s, "cell-A0", "20")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				document := domtest.Response(t, res)
+
+				cells := document.QuerySelectorAll(`.cell`)
+				assert.Equal(t, 3, cells.Length())
+
+				for i := 0; i < cells.Length(); i++ {
+					cell := cells.Item(i)
+					if assert.NotNil(t, cell) {
+						assert.Equal(t, "20", cell.TextContent())
+					}
+				}
+			}
+		})
+	})
+}
+
+func setCellExpressionRequest(t *testing.T, s *server, cell string, value string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPatch, "/table", strings.NewReader(url.Values{
+		cell: []string{value},
+	}.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+	s.routes().ServeHTTP(rec, req)
+	return rec
 }
