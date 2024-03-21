@@ -177,6 +177,19 @@ func (table *Table) revertCellChanges() {
 	}
 }
 
+func (table *Table) EnsureCell(column, row int) *Cell {
+	for i, cell := range table.Cells {
+		if cell.Row == row && cell.Column == column {
+			return &table.Cells[i]
+		}
+	}
+	table.Cells = append(table.Cells, Cell{
+		Row:    row,
+		Column: column,
+	})
+	return &table.Cells[len(table.Cells)-1]
+}
+
 type visit struct {
 	colum, row int
 }

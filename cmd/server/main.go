@@ -9,7 +9,6 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,7 +164,7 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 			http.Error(res, err.Error(), http.StatusBadRequest)
 			return
 		}
-		cell := server.cellPointer(column, row)
+		cell := server.table.EnsureCell(column, row)
 		cell.Error = ""
 		cell.Input = value[0]
 		var node expression.Node
@@ -191,21 +190,4 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 	server.render(res, req, "table", http.StatusOK, &server.table)
-}
-
-func (server *server) cellPointer(column, row int) *clice.Cell {
-	var cell *clice.Cell
-	index := slices.IndexFunc(server.table.Cells, func(cell clice.Cell) bool {
-		return cell.Row == row && cell.Column == column
-	})
-	if index >= 0 {
-		cell = &server.table.Cells[index]
-	} else {
-		server.table.Cells = append(server.table.Cells, clice.Cell{
-			Row:    row,
-			Column: column,
-		})
-		cell = &server.table.Cells[len(server.table.Cells)-1]
-	}
-	return cell
 }
