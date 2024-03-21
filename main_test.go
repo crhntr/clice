@@ -288,7 +288,7 @@ func TestServer(t *testing.T) {
   "cells": [
     {"id": "A0", "ex": "100"},
     {"id": "A1", "ex": "80"},
-	{"id": "B1", "ex": "(A0 + A1) / MAX_ROW"},
+	{"id": "B1", "ex": "(A0 + A1) / (iota + 1)"},
     {"id": "B0", "ex": "\"Average\""}
   ]
 }`
@@ -314,16 +314,16 @@ func TestServer(t *testing.T) {
 					assert.Equal(t, http.StatusOK, res.StatusCode)
 					document := domtest.Response(t, res)
 					if el := document.QuerySelector("#cell-A0"); assert.NotNil(t, el) {
-						assert.Contains(t, "100", el.TextContent())
+						assert.Contains(t, el.TextContent(), "100")
 					}
 					if el := document.QuerySelector("#cell-A1"); assert.NotNil(t, el) {
-						assert.Contains(t, "80", el.TextContent())
+						assert.Contains(t, el.TextContent(), "80")
 					}
 					if el := document.QuerySelector("#cell-B0"); assert.NotNil(t, el) {
-						assert.Contains(t, `"Average"`, el.TextContent())
+						assert.Contains(t, el.TextContent(), `"Average"`)
 					}
 					if el := document.QuerySelector("#cell-B1"); assert.NotNil(t, el) {
-						assert.Contains(t, "90", el.TextContent())
+						assert.Contains(t, el.TextContent(), "90")
 					}
 				}
 			})
@@ -337,7 +337,7 @@ func TestServer(t *testing.T) {
 				}{
 					{ID: "cell-A0", Expression: "100"},
 					{ID: "cell-A1", Expression: "80"},
-					{ID: "cell-B1", Expression: "(A0 + A1) / MAX_ROW"},
+					{ID: "cell-B1", Expression: "(A0 + A1) / (iota + 1)"},
 					{ID: "cell-B0", Expression: `"Average"`},
 				} {
 					rec := setCellExpressionRequest(t, mux, update.ID, update.Expression)

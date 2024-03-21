@@ -455,9 +455,8 @@ func newScope(table *Table, cell *Cell) *Scope {
 func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	switch ident {
 	case "iota":
-		return constant.MakeInt64(int64(s.Table.RowCount)), nil
+		return constant.MakeInt64(int64(s.cell.Row)), nil
 	default:
-		ident = strings.ToUpper(ident)
 		if !identifierPattern.MatchString(ident) {
 			return nil, fmt.Errorf("unknown variable %s", ident)
 		}
