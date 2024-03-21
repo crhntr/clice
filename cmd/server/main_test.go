@@ -290,8 +290,8 @@ func TestServer(t *testing.T) {
   "cells": [
     {"id": "A0", "ex": "100"},
     {"id": "A1", "ex": "80"},
-	{"id": "B1", "ex": "(A0 + A1) / (iota + 1)"},
-    {"id": "B0", "ex": "\"Average\""}
+    {"id": "B0", "ex": "\"Average\""},
+	{"id": "B1", "ex": "(A0 + A1) / (iota + 1)"}
   ]
 }`
 			t.Run("upload json", func(t *testing.T) {

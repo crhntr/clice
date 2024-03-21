@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/constant"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -16,11 +17,8 @@ type Cell struct {
 	row    int
 	column int
 
-	expression,
-	savedExpression ast.Expr
-
-	value,
-	savedValue constant.Value
+	expression ast.Expr
+	value      constant.Value
 
 	expressionInput string
 
@@ -47,10 +45,10 @@ func (cell *Cell) Expression() string {
 }
 
 func (cell *Cell) String() string {
-	if cell.savedValue == nil {
+	if cell.value == nil {
 		return ""
 	}
-	return cell.savedValue.String()
+	return cell.value.String()
 }
 
 func (cell *Cell) Error() string {
@@ -61,7 +59,7 @@ func (cell *Cell) Error() string {
 }
 
 func (cell *Cell) HasExpression() bool {
-	return cell.savedExpression != nil || cell.expression != nil
+	return cell.expression != nil
 }
 
 type EncodedCell struct {
@@ -104,10 +102,9 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 			return err
 		}
 		table.Cells = append(table.Cells, Cell{
-			column:          column,
-			row:             row,
-			savedExpression: exp,
-			expression:      exp,
+			column:     column,
+			row:        row,
+			expression: exp,
 		})
 	}
 
@@ -132,18 +129,6 @@ func NewTable(columns, rows int) Table {
 	return table
 }
 
-func (table *Table) Cell(column, row int) *Cell {
-	for i, cell := range table.Cells {
-		if cell.row == row && cell.column == column {
-			return &table.Cells[i]
-		}
-	}
-	return &Cell{
-		row:    row,
-		column: column,
-	}
-}
-
 func (table *Table) Rows() []Row {
 	result := make([]Row, table.RowCount)
 	for i := range result {
@@ -161,36 +146,28 @@ func (table *Table) Columns() []Column {
 }
 
 func (table *Table) Evaluate() error {
-	for i := range table.Cells {
+	cells := slices.Clone(table.Cells)
+	for i := range cells {
 		visited := make(visitSet)
-		cell := &table.Cells[i]
+		cell := &cells[i]
 		err := cell.evaluate(table, visited)
 		if err != nil {
 			cell.err = err
-			table.revertCellChanges()
 			return err
 		}
 		cell.err = nil
 	}
-	table.saveCellChanges()
+	slices.SortFunc(cells, func(c1, c2 Cell) int {
+		if c1.column == c2.column {
+			return c1.row - c2.row
+		}
+		return c1.column - c2.column
+	})
+	table.Cells = cells
 	return nil
 }
 
-func (table *Table) saveCellChanges() {
-	for i := range table.Cells {
-		table.Cells[i].savedValue = table.Cells[i].value
-		table.Cells[i].savedExpression = table.Cells[i].expression
-	}
-}
-
-func (table *Table) revertCellChanges() {
-	for i := range table.Cells {
-		table.Cells[i].value = table.Cells[i].savedValue
-		table.Cells[i].expression = table.Cells[i].savedExpression
-	}
-}
-
-func (table *Table) EnsureCell(column, row int) *Cell {
+func (table *Table) Cell(column, row int) *Cell {
 	for i, cell := range table.Cells {
 		if cell.row == row && cell.column == column {
 			return &table.Cells[i]
@@ -347,14 +324,14 @@ func (table *Table) Apply(assignments ...Assignment) error {
 		if err != nil {
 			return err
 		}
-		cell := table.EnsureCell(column, row)
+		cell := table.Cell(column, row)
 		exp, err := expression.New(assignment.Expression)
 		if err != nil {
 			return fmt.Errorf("failed to parse %s expression %s: %w", assignment.Identifier, assignment.Expression, err)
 		}
 		cell.expressionInput = assignment.Expression
-		cell.value = nil
 		cell.expression = exp
+		cell.value = nil
 		cell.err = nil
 	}
 	if parseError != nil {
