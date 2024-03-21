@@ -412,11 +412,8 @@ type visitSet map[visit]struct{}
 
 func (set visitSet) check(v visit) bool {
 	_, visited := set[v]
-	if visited {
-		return true
-	}
 	set[v] = struct{}{}
-	return false
+	return visited
 }
 
 func (cell *Cell) evaluate(table *Table, visited visitSet) error {
