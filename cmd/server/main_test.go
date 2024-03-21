@@ -114,7 +114,7 @@ func TestServer(t *testing.T) {
 
 			cellElement := document.QuerySelector("#cell-A0")
 			require.NotNil(t, cellElement)
-			require.Equal(t, cellElement.TextContent(), "100")
+			require.Equal(t, "100", cellElement.TextContent())
 		})
 
 		t.Run("float", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 
 			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
-				assert.Equal(t, cellElement.TextContent(), "0.5")
+				assert.Equal(t, "0.5", cellElement.TextContent())
 			}
 		})
 
@@ -142,7 +142,7 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 
 			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
-				assert.Equal(t, cellElement.TextContent(), `"Hello, world!"`)
+				assert.Equal(t, `"Hello, world!"`, cellElement.TextContent())
 			}
 		})
 
@@ -171,7 +171,7 @@ func TestServer(t *testing.T) {
 				document := domtest.Response(t, res)
 
 				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
-					require.Equal(t, cellElement.TextContent(), "true")
+					require.Equal(t, "true", cellElement.TextContent())
 				}
 			})
 			t.Run("false", func(t *testing.T) {
@@ -184,7 +184,7 @@ func TestServer(t *testing.T) {
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 
 				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
-					require.Equal(t, cellElement.TextContent(), "false")
+					require.Equal(t, "false", cellElement.TextContent())
 				}
 			})
 		})
@@ -208,11 +208,11 @@ func TestServer(t *testing.T) {
 
 				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
 					assert.NotNil(t, cellElement)
-					assert.Equal(t, cellElement.TextContent(), `100`)
+					assert.Equal(t, `100`, cellElement.TextContent())
 				}
 				if cellElement := document.QuerySelector("#cell-A1"); assert.NotNil(t, cellElement) {
 					require.NotNil(t, cellElement)
-					require.Equal(t, cellElement.TextContent(), `100`)
+					require.Equal(t, `100`, cellElement.TextContent())
 				}
 			}
 		})
