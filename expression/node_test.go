@@ -139,6 +139,8 @@ func TestEvaluate_Booleans(t *testing.T) {
 		switch s {
 		case "happy":
 			return constant.MakeBool(true), nil
+		case "wealthy":
+			return constant.MakeBool(false), nil
 		default:
 			return constant.MakeUnknown(), fmt.Errorf("unexpected cell reference: %s", s)
 		}
@@ -179,6 +181,27 @@ func TestEvaluate_Booleans(t *testing.T) {
 
 	t.Run("multiple unary operators", func(t *testing.T) {
 		node, err := expression.New("!!happy")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "true", value.String())
+	})
+
+	t.Run("binary operator and", func(t *testing.T) {
+		node, err := expression.New("wealthy && happy")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "false", value.String())
+	})
+	t.Run("binary operator or", func(t *testing.T) {
+		node, err := expression.New("wealthy || happy")
 		require.NoError(t, err)
 
 		value, err := expression.Evaluate(resolve, node)
