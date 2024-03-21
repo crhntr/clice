@@ -178,7 +178,7 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 				cell.Error = err.Error()
 				continue
 			}
-			s, err := expression.Sprint(node)
+			s, err := expression.String(node)
 			if err != nil {
 				cell.Error = err.Error()
 				continue
@@ -254,7 +254,7 @@ type Cell struct {
 
 func (cell *Cell) ExpressionText() string {
 	if cell.Expression != nil && cell.Error == "" {
-		s, err := expression.Sprint(cell.Expression)
+		s, err := expression.String(cell.Expression)
 		if err != nil {
 			return cell.input
 		}
@@ -269,7 +269,7 @@ type EncodedCell struct {
 }
 
 func (cell *Cell) MarshalJSON() ([]byte, error) {
-	s, err := expression.Sprint(cell.Expression)
+	s, err := expression.String(cell.Expression)
 	if err != nil {
 		s = cell.input
 	}

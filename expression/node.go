@@ -23,7 +23,10 @@ func New(in string) (ast.Expr, error) {
 	return parser.ParseExpr(in)
 }
 
-func Sprint(expr ast.Expr) (string, error) {
+func String(expr ast.Expr) (string, error) {
+	if expr == nil {
+		return "", nil
+	}
 	set := token.NewFileSet()
 	var buf bytes.Buffer
 	err := printer.Fprint(&buf, set, expr)

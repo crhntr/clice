@@ -212,7 +212,7 @@ func TestEvaluate_Booleans(t *testing.T) {
 	})
 }
 
-func Test_parse(t *testing.T) {
+func TestEvaluate(t *testing.T) {
 	t.Run("parsing a negative cell value", func(t *testing.T) {
 		node, err := expression.New("-J9")
 		if err != nil {
@@ -271,6 +271,29 @@ func Test_parse(t *testing.T) {
 			_, err = expression.Evaluate(scope, node)
 			assert.ErrorContains(t, err, "banana")
 		})
+	})
+}
+
+func TestString(t *testing.T) {
+	t.Run("empty expression", func(t *testing.T) {
+		s, err := expression.String(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, "", s)
+	})
+
+	t.Run("simple expression", func(t *testing.T) {
+		node, err := expression.New("1+2")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		s, err := expression.String(node)
+		if err != nil {
+			t.Fatal(err)
+		}
+		assert.Equal(t, "1 + 2", s)
 	})
 }
 
