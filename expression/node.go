@@ -54,9 +54,14 @@ func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
 	case *ast.ParenExpr:
 		return Evaluate(scope, e.X)
 	case *ast.Ident:
-		return scope.Resolve(e.Name)
-	case nil:
-		return constant.MakeInt64(0), nil
+		switch e.Name {
+		case "true":
+			return constant.MakeBool(true), nil
+		case "false":
+			return constant.MakeBool(false), nil
+		default:
+			return scope.Resolve(e.Name)
+		}
 	default:
 		return nil, fmt.Errorf("unsupported expression type: %T", expr)
 	}

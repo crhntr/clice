@@ -7,11 +7,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/crhntr/clice/expression"
 )
 
-func Test_parse(t *testing.T) {
+func TestEvaluate_Integers(t *testing.T) {
 	for _, tt := range []struct {
 		Name       string
 		Expression string
@@ -131,7 +132,64 @@ func Test_parse(t *testing.T) {
 			}
 		})
 	}
+}
 
+func TestEvaluate_Booleans(t *testing.T) {
+	resolve := fakeScopeFunc(func(s string) (constant.Value, error) {
+		switch s {
+		case "happy":
+			return constant.MakeBool(true), nil
+		default:
+			return constant.MakeUnknown(), fmt.Errorf("unexpected cell reference: %s", s)
+		}
+	})
+
+	t.Run("true", func(t *testing.T) {
+		node, err := expression.New("true")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "true", value.String())
+	})
+
+	t.Run("false", func(t *testing.T) {
+		node, err := expression.New("false")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "false", value.String())
+	})
+
+	t.Run("unary operator", func(t *testing.T) {
+		node, err := expression.New("!happy")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "false", value.String())
+	})
+
+	t.Run("multiple unary operators", func(t *testing.T) {
+		node, err := expression.New("!!happy")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "true", value.String())
+	})
+}
+
+func Test_parse(t *testing.T) {
 	t.Run("parsing a negative cell value", func(t *testing.T) {
 		node, err := expression.New("-J9")
 		if err != nil {
