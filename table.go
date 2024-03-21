@@ -13,27 +13,55 @@ import (
 )
 
 type Cell struct {
-	Row    int
-	Column int
+	row    int
+	column int
 
-	Expression,
-	SavedExpression ast.Expr
-	Value,
-	SavedValue constant.Value
+	expression,
+	savedExpression ast.Expr
 
-	Input,
-	Error string
+	value,
+	savedValue constant.Value
+
+	expressionInput string
+
+	err error
 }
 
-func (cell *Cell) ExpressionText() string {
-	if cell.Expression != nil && cell.Error == "" {
-		s, err := expression.String(cell.Expression)
+func (cell *Cell) Column() int {
+	return cell.column
+}
+
+func (cell *Cell) Row() int {
+	return cell.row
+}
+
+func (cell *Cell) Expression() string {
+	if cell.expression != nil && cell.err == nil {
+		s, err := expression.String(cell.expression)
 		if err != nil {
-			return cell.Input
+			return cell.expressionInput
 		}
 		return s
 	}
-	return cell.Input
+	return cell.expressionInput
+}
+
+func (cell *Cell) String() string {
+	if cell.savedValue == nil {
+		return ""
+	}
+	return cell.savedValue.String()
+}
+
+func (cell *Cell) Error() string {
+	if cell.err == nil {
+		return ""
+	}
+	return cell.err.Error()
+}
+
+func (cell *Cell) HasExpression() bool {
+	return cell.savedExpression != nil || cell.expression != nil
 }
 
 type EncodedCell struct {
@@ -42,9 +70,9 @@ type EncodedCell struct {
 }
 
 func (cell *Cell) MarshalJSON() ([]byte, error) {
-	s, err := expression.String(cell.Expression)
+	s, err := expression.String(cell.expression)
 	if err != nil {
-		s = cell.Input
+		s = cell.expressionInput
 	}
 	return json.Marshal(EncodedCell{
 		ID:         strings.TrimPrefix(cell.ID(), "cell-"),
@@ -76,28 +104,18 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 			return err
 		}
 		table.Cells = append(table.Cells, Cell{
-			Column:          column,
-			Row:             row,
-			SavedExpression: exp,
-			Expression:      exp,
+			column:          column,
+			row:             row,
+			savedExpression: exp,
+			expression:      exp,
 		})
 	}
 
 	return table.Evaluate()
 }
 
-func (cell *Cell) String() string {
-	if cell.SavedExpression == nil {
-		return ""
-	}
-	return cell.Value.String()
-}
-
-func (cell *Cell) IDPathParam() string {
-	return fmt.Sprintf("%s%d", columnLabel(cell.Column), cell.Row)
-}
 func (cell *Cell) ID() string {
-	return "cell-" + cell.IDPathParam()
+	return fmt.Sprintf("%s%d", columnLabel(cell.column), cell.row)
 }
 
 type Table struct {
@@ -116,13 +134,13 @@ func NewTable(columns, rows int) Table {
 
 func (table *Table) Cell(column, row int) *Cell {
 	for i, cell := range table.Cells {
-		if cell.Row == row && cell.Column == column {
+		if cell.row == row && cell.column == column {
 			return &table.Cells[i]
 		}
 	}
 	return &Cell{
-		Row:    row,
-		Column: column,
+		row:    row,
+		column: column,
 	}
 }
 
@@ -143,21 +161,16 @@ func (table *Table) Columns() []Column {
 }
 
 func (table *Table) Evaluate() error {
-	for _, cell := range table.Cells {
-		if cell.Error != "" {
-			return fmt.Errorf("cell parsing error %s", cell.IDPathParam())
-		}
-	}
 	for i := range table.Cells {
 		visited := make(visitSet)
 		cell := &table.Cells[i]
 		err := cell.evaluate(table, visited)
 		if err != nil {
-			cell.Error = err.Error()
+			cell.err = err
 			table.revertCellChanges()
 			return err
 		}
-		cell.Error = ""
+		cell.err = nil
 	}
 	table.saveCellChanges()
 	return nil
@@ -165,27 +178,27 @@ func (table *Table) Evaluate() error {
 
 func (table *Table) saveCellChanges() {
 	for i := range table.Cells {
-		table.Cells[i].SavedValue = table.Cells[i].Value
-		table.Cells[i].SavedExpression = table.Cells[i].Expression
+		table.Cells[i].savedValue = table.Cells[i].value
+		table.Cells[i].savedExpression = table.Cells[i].expression
 	}
 }
 
 func (table *Table) revertCellChanges() {
 	for i := range table.Cells {
-		table.Cells[i].Value = table.Cells[i].SavedValue
-		table.Cells[i].Expression = table.Cells[i].SavedExpression
+		table.Cells[i].value = table.Cells[i].savedValue
+		table.Cells[i].expression = table.Cells[i].savedExpression
 	}
 }
 
 func (table *Table) EnsureCell(column, row int) *Cell {
 	for i, cell := range table.Cells {
-		if cell.Row == row && cell.Column == column {
+		if cell.row == row && cell.column == column {
 			return &table.Cells[i]
 		}
 	}
 	table.Cells = append(table.Cells, Cell{
-		Row:    row,
-		Column: column,
+		row:    row,
+		column: column,
 	})
 	return &table.Cells[len(table.Cells)-1]
 }
@@ -204,23 +217,23 @@ func (set visitSet) check(v visit) bool {
 
 func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 	v := visit{
-		colum: cell.Column,
-		row:   cell.Row,
+		colum: cell.column,
+		row:   cell.row,
 	}
 	_, alreadyVisited := visited[v]
 	if alreadyVisited {
-		return fmt.Errorf("recursive reference to %s%d", columnLabel(cell.Column), cell.Row)
+		return fmt.Errorf("recursive reference to %s%d", columnLabel(cell.column), cell.row)
 	}
 	visited[v] = struct{}{}
-	if cell.Expression == nil {
-		cell.Value = constant.MakeInt64(0)
+	if cell.expression == nil {
+		cell.value = constant.MakeInt64(0)
 		return nil
 	}
-	result, err := expression.Evaluate(newScope(table, cell), cell.Expression)
+	result, err := expression.Evaluate(newScope(table, cell), cell.expression)
 	if err != nil {
 		return err
 	}
-	cell.Value = result
+	cell.value = result
 	return nil
 }
 
@@ -241,7 +254,7 @@ func newScope(table *Table, cell *Cell) *Scope {
 func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	switch ident {
 	case "iota":
-		return constant.MakeInt64(int64(s.cell.Row)), nil
+		return constant.MakeInt64(int64(s.cell.row)), nil
 	default:
 		if !identifierPattern.MatchString(ident) {
 			return nil, fmt.Errorf("unknown variable %s", ident)
@@ -254,14 +267,14 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 			return nil, fmt.Errorf("recursive reference to %s%d", columnLabel(column), row)
 		}
 		cell := s.Table.Cell(column, row)
-		if cell.Expression == nil {
+		if cell.expression == nil {
 			return constant.MakeInt64(0), nil
 		}
 		return expression.Evaluate(&Scope{
 			cell:    cell,
 			Table:   s.Table,
 			visited: s.visited,
-		}, cell.Expression)
+		}, cell.expression)
 	}
 }
 
@@ -339,10 +352,10 @@ func (table *Table) Apply(assignments ...Assignment) error {
 		if err != nil {
 			return fmt.Errorf("failed to parse %s expression %s: %w", assignment.Identifier, assignment.Expression, err)
 		}
-		cell.Input = assignment.Expression
-		cell.Value = nil
-		cell.Expression = exp
-		cell.Error = ""
+		cell.expressionInput = assignment.Expression
+		cell.value = nil
+		cell.expression = exp
+		cell.err = nil
 	}
 	if parseError != nil {
 		return fmt.Errorf("failed to parse some expressions: %w", parseError)

@@ -60,8 +60,8 @@
 </html>
 
 {{define "edit-cell" -}}
-  <td class="cell" id="{{.ID}}" data-column-index="{{.Column}}" data-row-index="{{.Row}}" >
-    <input type="text" name="{{.ID}}" value="{{.ExpressionText}}" aria-label="expression for cell {{.IDPathParam}}" autofocus>
+  <td class="cell" id="cell-{{.ID}}" data-column-index="{{.Column}}" data-row-index="{{.Row}}" >
+    <input type="text" name="cell-{{.ID}}" value="{{.Expression}}" aria-label="expression for cell {{.ID}}" autofocus>
       {{if .Error}}
         <p style="color: red;">{{.Error}}</p>
       {{end}}
@@ -70,7 +70,7 @@
 
 {{define "view-cell"}}
     {{if not .Error -}}
-      <td class="cell" id="{{.ID}}" data-row-column="{{.Column}}" data-row-index="{{.Row}}" hx-get="/cell/{{.IDPathParam}}" hx-swap="outerHTML">
+      <td class="cell" id="cell-{{.ID}}" data-row-column="{{.Column}}" data-row-index="{{.Row}}" hx-get="/cell/{{.ID}}" hx-swap="outerHTML">
           {{- .String -}}
       </td>
     {{- else -}}

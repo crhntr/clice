@@ -26,7 +26,7 @@ func main() {
 	flag.Parse()
 	s := server{
 		table:     table,
-		templates: template.Must(template.New("index.html.template").Parse(indexHTMLTemplate)),
+		templates: template.Must(template.New("index.html.template").Option("missingkey=error").Parse(indexHTMLTemplate)),
 	}
 	log.Println("starting server")
 	log.Fatal(http.ListenAndServe(":8080", s.routes()))
@@ -89,7 +89,7 @@ func (server *server) getTableJSON(res http.ResponseWriter, _ *http.Request) {
 
 	filtered := server.table.Cells[:0]
 	for _, cell := range server.table.Cells {
-		if cell.SavedExpression == nil || cell.Expression == nil {
+		if !cell.HasExpression() {
 			continue
 		}
 		filtered = append(filtered, cell)
