@@ -90,8 +90,8 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 	if err := json.Unmarshal(in, &encoded); err != nil {
 		return err
 	}
-	table.RowCount = encoded.RowCount
-	table.ColumnCount = encoded.ColumnCount
+	table.RowLen = encoded.RowCount
+	table.ColumnLen = encoded.ColumnCount
 	for _, cell := range encoded.Cells {
 		column, row, err := CellID(cell.ID)
 		if err != nil {
@@ -116,21 +116,21 @@ func (cell *Cell) ID() string {
 }
 
 type Table struct {
-	ColumnCount int    `json:"columns"`
-	RowCount    int    `json:"rows"`
-	Cells       []Cell `json:"cells"`
+	ColumnLen int    `json:"columns"`
+	RowLen    int    `json:"rows"`
+	Cells     []Cell `json:"cells"`
 }
 
 func NewTable(columns, rows int) Table {
 	table := Table{
-		RowCount:    rows,
-		ColumnCount: columns,
+		RowLen:    rows,
+		ColumnLen: columns,
 	}
 	return table
 }
 
 func (table *Table) Rows() []Row {
-	result := make([]Row, table.RowCount)
+	result := make([]Row, table.RowLen)
 	for i := range result {
 		result[i].Number = i
 	}
@@ -138,7 +138,7 @@ func (table *Table) Rows() []Row {
 }
 
 func (table *Table) Columns() []Column {
-	result := make([]Column, table.ColumnCount)
+	result := make([]Column, table.ColumnLen)
 	for i := range result {
 		result[i].Number = i
 	}
@@ -199,7 +199,7 @@ func (cell *Cell) evaluate(table *Table, visited visitSet) error {
 	}
 	_, alreadyVisited := visited[v]
 	if alreadyVisited {
-		return fmt.Errorf("recursive reference to %s%d", columnLabel(cell.column), cell.row)
+		return fmt.Errorf("recursive reference to %s", cell.ID())
 	}
 	visited[v] = struct{}{}
 	if cell.expression == nil {
@@ -240,8 +240,14 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 		if err != nil {
 			return nil, err
 		}
+		if row < 0 || row >= s.Table.RowLen {
+			return nil, fmt.Errorf("row index %d out of bounds [0, %d)", row, s.Table.RowLen)
+		}
+		if column < 0 || column >= s.Table.ColumnLen {
+			return nil, fmt.Errorf("column index %d out of bounds [0, %d)", column, s.Table.ColumnLen)
+		}
 		if s.visited.check(visit{row: row, colum: column}) {
-			return nil, fmt.Errorf("recursive reference to %s%d", columnLabel(column), row)
+			return nil, fmt.Errorf("recursive reference to %s", ident)
 		}
 		cell := s.Table.Cell(column, row)
 		if cell.expression == nil {
@@ -268,13 +274,7 @@ func CellID(in string) (int, int, error) {
 	if err != nil {
 		return 0, 0, fmt.Errorf("failed to Parse row number: %w", err)
 	}
-	//if row > maxRow {
-	//	return 0, 0, fmt.Errorf("row number %d out of range it must be greater than 0 and less than or equal to %d", row, maxRow)
-	//}
 	column := columnNumber(columnName)
-	//if column > maxColumn {
-	//	return 0, 0, fmt.Errorf("column %s out of range it must be greater than or equal to %s and less than or equal to %s", columnName, columnLabel(0), columnLabel(maxColumn))
-	//}
 	return column, row, nil
 }
 

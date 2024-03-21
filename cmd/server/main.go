@@ -21,8 +21,8 @@ var indexHTMLTemplate string
 
 func main() {
 	table := clice.NewTable(10, 10)
-	flag.IntVar(&table.ColumnCount, "columns", table.ColumnCount, "the number of table columns")
-	flag.IntVar(&table.RowCount, "rows", table.RowCount, "the number of table rows")
+	flag.IntVar(&table.ColumnLen, "columns", table.ColumnLen, "the number of table columns")
+	flag.IntVar(&table.RowLen, "rows", table.RowLen, "the number of table rows")
 	flag.Parse()
 	s := server{
 		table:     table,

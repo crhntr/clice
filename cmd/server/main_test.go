@@ -44,6 +44,26 @@ func TestServer(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 			// TODO: use assert.Equal(t, http.StatusNotFound, res.StatusCode)
 		})
+		t.Run("row out of bounds", func(t *testing.T) {
+			s := setup(1, 1)
+			mux := s.routes()
+
+			rec := setCellExpressionRequest(t, mux, "A0", "A1")
+			res := rec.Result()
+
+			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+			assert.Contains(t, rec.Body.String(), "row index 1 out of bounds [0, 1)")
+		})
+		t.Run("column out of bounds", func(t *testing.T) {
+			s := setup(1, 1)
+			mux := s.routes()
+
+			rec := setCellExpressionRequest(t, mux, "A0", "B0")
+			res := rec.Result()
+
+			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+			assert.Contains(t, rec.Body.String(), "column index 1 out of bounds [0, 1)")
+		})
 		t.Run("cell with expression", func(t *testing.T) {
 			s := setup(1, 1)
 
@@ -363,7 +383,7 @@ func TestServer(t *testing.T) {
 func setCellExpressionRequest(t *testing.T, mux http.Handler, cell string, value string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPatch, "/table", strings.NewReader(url.Values{
-		cell: []string{value},
+		"cell-" + cell: []string{value},
 	}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
