@@ -18,6 +18,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/crhntr/clice"
 )
 
 func TestServer(t *testing.T) {
@@ -25,7 +27,7 @@ func TestServer(t *testing.T) {
 
 	setup := func(columns, rows int) *server {
 		return &server{
-			table:     NewTable(columns, rows),
+			table:     clice.NewTable(columns, rows),
 			templates: templates,
 		}
 	}
