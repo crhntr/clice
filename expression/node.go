@@ -66,6 +66,14 @@ func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
 			return scope.Resolve(e.Name)
 		}
 	default:
-		return nil, fmt.Errorf("unsupported expression type: %T", expr)
+		return nil, &UnsupportedError{Expr: expr}
 	}
+}
+
+type UnsupportedError struct {
+	ast.Expr
+}
+
+func (e *UnsupportedError) Error() string {
+	return fmt.Sprintf("unsupported expression type: %T", e.Expr)
 }

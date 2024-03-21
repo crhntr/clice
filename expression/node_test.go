@@ -1,6 +1,7 @@
 package expression_test
 
 import (
+	"errors"
 	"fmt"
 	"go/constant"
 	"strconv"
@@ -272,27 +273,52 @@ func TestEvaluate(t *testing.T) {
 			assert.ErrorContains(t, err, "banana")
 		})
 	})
-}
 
-func TestString(t *testing.T) {
-	t.Run("empty expression", func(t *testing.T) {
-		s, err := expression.String(nil)
+	t.Run("inline function node", func(t *testing.T) {
+		node, err := expression.New("func(x int) int { return 1 + x}(ten)")
 		if err != nil {
 			t.Fatal(err)
 		}
+
+		scope := fakeScopeFunc(func(s string) (constant.Value, error) {
+			switch s {
+			case "ten":
+				return constant.MakeInt64(10), nil
+			default:
+				t.Fatal("unexpected cell reference")
+				return nil, nil
+			}
+		})
+
+		_, err = expression.Evaluate(scope, node)
+
+		var exprErr *expression.UnsupportedError
+		require.True(t, errors.As(err, &exprErr))
+		require.ErrorContains(t, err, "unsupported expression type: *ast.CallExpr")
+	})
+}
+
+func TestString(t *testing.T) {
+	t.Run("nil expression", func(t *testing.T) {
+		s, err := expression.String(nil)
+		require.NoError(t, err)
+		assert.Equal(t, "", s)
+	})
+
+	t.Run("empty expression", func(t *testing.T) {
+		node, err := expression.New("")
+		require.NoError(t, err)
+		s, err := expression.String(node)
+		require.NoError(t, err)
 		assert.Equal(t, "", s)
 	})
 
 	t.Run("simple expression", func(t *testing.T) {
 		node, err := expression.New("1+2")
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 
 		s, err := expression.String(node)
-		if err != nil {
-			t.Fatal(err)
-		}
+		require.NoError(t, err)
 		assert.Equal(t, "1 + 2", s)
 	})
 }
