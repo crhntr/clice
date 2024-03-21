@@ -452,31 +452,10 @@ func newScope(table *Table, cell *Cell) *Scope {
 	}
 }
 
-const (
-	RowIdent       = "ROW"
-	ColumnIdent    = "COLUMN"
-	MaxRowIdent    = "MAX_ROW"
-	MaxColumnIdent = "MAX_COLUMN"
-	MinRowIdent    = "MIN_ROW"
-	MinColumnIdent = "MIN_COLUMN"
-)
-
 func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	switch ident {
-	case "true":
-		return constant.MakeBool(true), nil
-	case "false":
-		return constant.MakeBool(false), nil
-	case RowIdent:
-		return constant.MakeInt64(int64(s.cell.Row)), nil
-	case ColumnIdent:
-		return constant.MakeInt64(int64(s.cell.Column)), nil
-	case MaxRowIdent:
+	case "iota":
 		return constant.MakeInt64(int64(s.Table.RowCount)), nil
-	case MaxColumnIdent:
-		return constant.MakeInt64(int64(s.Table.ColumnCount)), nil
-	case MinRowIdent, MinColumnIdent:
-		return constant.MakeInt64(0), nil
 	default:
 		ident = strings.ToUpper(ident)
 		if !identifierPattern.MatchString(ident) {
