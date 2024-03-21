@@ -236,6 +236,37 @@ func TestServer(t *testing.T) {
 				}
 			}
 		})
+
+		t.Run("self reference", func(t *testing.T) {
+			s := setup(1, 1)
+			mux := s.routes()
+
+			{ // setup some cell to reference
+				rec := setCellExpressionRequest(t, mux, "cell-A0", "A0")
+				res := rec.Result()
+				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+				assert.Contains(t, rec.Body.String(), "recursive reference to A0")
+			}
+		})
+
+		t.Run("loop reference", func(t *testing.T) {
+			s := setup(1, 2)
+			mux := s.routes()
+
+			{ // setup some cell to reference
+				rec := setCellExpressionRequest(t, mux, "cell-A0", "A1")
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+			}
+
+			{ // setup some cell to reference
+				rec := setCellExpressionRequest(t, mux, "cell-A1", "A0")
+				res := rec.Result()
+				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+				assert.Contains(t, rec.Body.String(), "recursive reference to A1")
+			}
+		})
+
 		t.Run("parsing a huge cell value fails", func(t *testing.T) {
 			s := setup(1, 2)
 			mux := s.routes()
