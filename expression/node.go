@@ -31,12 +31,6 @@ func Sprint(expr ast.Expr) (string, error) {
 }
 
 func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			err = fmt.Errorf("panic: %v", r)
-		}
-	}()
-
 	switch e := expr.(type) {
 	case *ast.BasicLit:
 		cv := constant.MakeFromLiteral(e.Value, e.Kind, 0)

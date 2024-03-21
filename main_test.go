@@ -281,50 +281,79 @@ func TestServer(t *testing.T) {
 
 	t.Run("upload", func(t *testing.T) {
 		t.Run("example file", func(t *testing.T) {
-			s := setup(1, 1)
-			mux := s.routes()
-
-			{ // upload table.json
-				// language=json
-				tableJSON := `{
-  "rows": 3,
+			// language=json
+			tableJSON := `{
+  "rows": 2,
   "columns": 2,
   "cells": [
     {"id": "A0", "ex": "100"},
     {"id": "A1", "ex": "80"},
-	{"id": "B0", "ex": "(A0 + A1) / B1"},
-    {"id": "B1", "ex": "MAX_ROW"}
+	{"id": "B1", "ex": "(A0 + A1) / MAX_ROW"},
+    {"id": "B0", "ex": "\"Average\""}
   ]
 }`
-				rec := uploadJSONTableRequest(t, mux, tableJSON)
-				res := rec.Result()
-				assert.Equal(t, http.StatusOK, res.StatusCode)
+			t.Run("upload json", func(t *testing.T) {
+				s := setup(2, 2)
+				mux := s.routes()
 
-				if out, _ := io.ReadAll(res.Body); t.Failed() {
-					t.Log(string(out))
+				{ // upload table.json
+					rec := uploadJSONTableRequest(t, mux, tableJSON)
+					res := rec.Result()
+					assert.Equal(t, http.StatusOK, res.StatusCode)
+
+					if out, _ := io.ReadAll(res.Body); t.Failed() {
+						t.Log(string(out))
+					}
 				}
-			}
 
-			{ // asser the values are calculated
-				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				{ // asser the values are calculated
+					req := httptest.NewRequest(http.MethodGet, "/", nil)
+					rec := httptest.NewRecorder()
+					mux.ServeHTTP(rec, req)
+					res := rec.Result()
+					assert.Equal(t, http.StatusOK, res.StatusCode)
+					document := domtest.Response(t, res)
+					if el := document.QuerySelector("#cell-A0"); assert.NotNil(t, el) {
+						assert.Contains(t, "100", el.TextContent())
+					}
+					if el := document.QuerySelector("#cell-A1"); assert.NotNil(t, el) {
+						assert.Contains(t, "80", el.TextContent())
+					}
+					if el := document.QuerySelector("#cell-B0"); assert.NotNil(t, el) {
+						assert.Contains(t, `"Average"`, el.TextContent())
+					}
+					if el := document.QuerySelector("#cell-B1"); assert.NotNil(t, el) {
+						assert.Contains(t, "90", el.TextContent())
+					}
+				}
+			})
+			t.Run("example file", func(t *testing.T) {
+				s := setup(2, 2)
+				mux := s.routes()
+
+				for _, update := range []struct {
+					ID         string
+					Expression string
+				}{
+					{ID: "cell-A0", Expression: "100"},
+					{ID: "cell-A1", Expression: "80"},
+					{ID: "cell-B1", Expression: "(A0 + A1) / MAX_ROW"},
+					{ID: "cell-B0", Expression: `"Average"`},
+				} {
+					rec := setCellExpressionRequest(t, mux, update.ID, update.Expression)
+					res := rec.Result()
+					assert.Equal(t, http.StatusOK, res.StatusCode)
+				}
+
+				req := httptest.NewRequest(http.MethodGet, "/table.json", nil)
 				rec := httptest.NewRecorder()
 				mux.ServeHTTP(rec, req)
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
-				document := domtest.Response(t, res)
-				if el := document.QuerySelector("#cell-A0"); assert.NotNil(t, el) {
-					assert.Contains(t, "100", el.TextContent())
-				}
-				if el := document.QuerySelector("#cell-A1"); assert.NotNil(t, el) {
-					assert.Contains(t, "80", el.TextContent())
-				}
-				if el := document.QuerySelector("#cell-B0"); assert.NotNil(t, el) {
-					assert.Contains(t, "90", el.TextContent())
-				}
-				if el := document.QuerySelector("#cell-B1"); assert.NotNil(t, el) {
-					assert.Contains(t, "2", el.TextContent())
-				}
-			}
+				defer closeAndIgnoreError(res.Body)
+				body, _ := io.ReadAll(res.Body)
+				assert.JSONEq(t, tableJSON, string(body))
+			})
 		})
 	})
 }

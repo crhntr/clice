@@ -189,6 +189,7 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 	}
 	err := server.table.calculateValues()
 	if err != nil {
+		log.Println(err)
 		server.render(res, req, "table", http.StatusOK, &server.table)
 		return
 	}
@@ -270,7 +271,7 @@ type EncodedCell struct {
 func (cell *Cell) MarshalJSON() ([]byte, error) {
 	s, err := expression.Sprint(cell.Expression)
 	if err != nil {
-		return nil, err
+		s = cell.input
 	}
 	return json.Marshal(EncodedCell{
 		ID:         strings.TrimPrefix(cell.ID(), "cell-"),
@@ -474,9 +475,9 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	case ColumnIdent:
 		return constant.MakeInt64(int64(s.cell.Column)), nil
 	case MaxRowIdent:
-		return constant.MakeInt64(int64(s.Table.RowCount - 1)), nil
+		return constant.MakeInt64(int64(s.Table.RowCount)), nil
 	case MaxColumnIdent:
-		return constant.MakeInt64(int64(s.Table.ColumnCount - 1)), nil
+		return constant.MakeInt64(int64(s.Table.ColumnCount)), nil
 	case MinRowIdent, MinColumnIdent:
 		return constant.MakeInt64(0), nil
 	default:
