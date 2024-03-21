@@ -1,9 +1,12 @@
 package expression_test
 
 import (
+	"fmt"
 	"go/constant"
 	"strconv"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 
 	"github.com/crhntr/clice/expression"
 )
@@ -48,6 +51,11 @@ func Test_parse(t *testing.T) {
 			Name:       "space around",
 			Expression: " 8/2 ",
 			Result:     4,
+		},
+		{
+			Name:       "unary operator",
+			Expression: "-A1",
+			Result:     -100,
 		},
 		{
 			Name:       "cell in cells slice",
@@ -101,18 +109,19 @@ func Test_parse(t *testing.T) {
 		},
 	} {
 		t.Run(tt.Name, func(t *testing.T) {
-
 			node, err := expression.New(tt.Expression)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			value, err := expression.Evaluate(fakeScopeFunc(func(s string) (constant.Value, error) {
+			scope := fakeScopeFunc(func(s string) (constant.Value, error) {
 				if s == "A1" {
 					return constant.MakeInt64(100), nil
 				}
 				return constant.MakeInt64(0), nil
-			}), node)
+			})
+
+			value, err := expression.Evaluate(scope, node)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -122,6 +131,66 @@ func Test_parse(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("parsing a negative cell value", func(t *testing.T) {
+		node, err := expression.New("-J9")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		scope := fakeScopeFunc(func(s string) (constant.Value, error) {
+			return constant.MakeInt64(0), fmt.Errorf("banana")
+		})
+
+		_, err = expression.Evaluate(scope, node)
+		assert.ErrorContains(t, err, "banana")
+	})
+
+	t.Run("either side of a boolean expression fail", func(t *testing.T) {
+		t.Run("left side fails", func(t *testing.T) {
+			scope := fakeScopeFunc(func(s string) (constant.Value, error) {
+				switch s {
+				case "a":
+					return constant.MakeInt64(2), nil
+				case "b":
+					return constant.MakeInt64(0), fmt.Errorf("banana")
+				default:
+					t.Fatal("unexpected cell reference")
+					return nil, nil
+				}
+			})
+
+			node, err := expression.New("a + b")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = expression.Evaluate(scope, node)
+			assert.ErrorContains(t, err, "banana")
+		})
+
+		t.Run("right side fails", func(t *testing.T) {
+			scope := fakeScopeFunc(func(s string) (constant.Value, error) {
+				switch s {
+				case "a":
+					return constant.MakeInt64(0), fmt.Errorf("banana")
+				case "b":
+					return constant.MakeInt64(2), nil
+				default:
+					t.Fatal("unexpected cell reference")
+					return nil, nil
+				}
+			})
+
+			node, err := expression.New("a + b")
+			if err != nil {
+				t.Fatal(err)
+			}
+
+			_, err = expression.Evaluate(scope, node)
+			assert.ErrorContains(t, err, "banana")
+		})
+	})
 }
 
 type fakeScopeFunc func(string) (constant.Value, error)
