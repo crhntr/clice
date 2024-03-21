@@ -45,11 +45,12 @@ func TestServer(t *testing.T) {
 		t.Run("cell with expression", func(t *testing.T) {
 			s := setup(1, 1)
 
-			require.Equal(t, http.StatusOK, setCellExpressionRequest(t, s, "cell-A0", "100").Result().StatusCode)
+			mux := s.routes()
+			require.Equal(t, http.StatusOK, setCellExpressionRequest(t, mux, "cell-A0", "100").Result().StatusCode)
 
 			req := httptest.NewRequest(http.MethodGet, "/cell/A0", nil)
 			rec := httptest.NewRecorder()
-			s.routes().ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 			res := rec.Result()
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 			elements := domtest.DocumentFragment(t, res.Body, atom.Tr)
@@ -72,10 +73,11 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("empty table no cells", func(t *testing.T) {
 			s := setup(1, 1)
+			mux := s.routes()
 
 			req := httptest.NewRequest(http.MethodGet, "/cell/A0", nil)
 			rec := httptest.NewRecorder()
-			s.routes().ServeHTTP(rec, req)
+			mux.ServeHTTP(rec, req)
 			res := rec.Result()
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 			elements := domtest.DocumentFragment(t, res.Body, atom.Tr)
@@ -101,8 +103,9 @@ func TestServer(t *testing.T) {
 	t.Run("setting a cell expression literal", func(t *testing.T) {
 		t.Run("int", func(t *testing.T) {
 			s := setup(1, 1)
+			mux := s.routes()
 
-			rec := setCellExpressionRequest(t, s, "cell-A0", "100")
+			rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
 			res := rec.Result()
 			document := domtest.Response(t, res)
 			assert.Equal(t, http.StatusOK, res.StatusCode)
@@ -114,8 +117,9 @@ func TestServer(t *testing.T) {
 
 		t.Run("float", func(t *testing.T) {
 			s := setup(1, 1)
+			mux := s.routes()
 
-			rec := setCellExpressionRequest(t, s, "cell-A0", "0.5")
+			rec := setCellExpressionRequest(t, mux, "cell-A0", "0.5")
 			res := rec.Result()
 			document := domtest.Response(t, res)
 			assert.Equal(t, http.StatusOK, res.StatusCode)
@@ -127,8 +131,9 @@ func TestServer(t *testing.T) {
 
 		t.Run("string", func(t *testing.T) {
 			s := setup(1, 1)
+			mux := s.routes()
 
-			rec := setCellExpressionRequest(t, s, "cell-A0", `"Hello, world!"`)
+			rec := setCellExpressionRequest(t, mux, "cell-A0", `"Hello, world!"`)
 			res := rec.Result()
 			document := domtest.Response(t, res)
 
@@ -142,22 +147,23 @@ func TestServer(t *testing.T) {
 		t.Run("bool", func(t *testing.T) {
 			t.Run("true", func(t *testing.T) {
 				s := setup(1, 1)
+				mux := s.routes()
 
 				{ // add a cell with a bool
-					rec := setCellExpressionRequest(t, s, "cell-A0", "true")
+					rec := setCellExpressionRequest(t, mux, "cell-A0", "true")
 					res := rec.Result()
 					assert.Equal(t, http.StatusOK, res.StatusCode)
 				}
 
-				{ // add a cell that references the cell with the bool
-					rec := setCellExpressionRequest(t, s, "cell-A1", "!A0")
+				{ // add a cell that references the cell with a bool
+					rec := setCellExpressionRequest(t, mux, "cell-A1", "!A0")
 					res := rec.Result()
 					assert.Equal(t, http.StatusOK, res.StatusCode)
 				}
 
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				rec := httptest.NewRecorder()
-				s.routes().ServeHTTP(rec, req)
+				mux.ServeHTTP(rec, req)
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 				document := domtest.Response(t, res)
@@ -168,8 +174,9 @@ func TestServer(t *testing.T) {
 			})
 			t.Run("false", func(t *testing.T) {
 				s := setup(1, 1)
+				mux := s.routes()
 
-				rec := setCellExpressionRequest(t, s, "cell-A0", "false")
+				rec := setCellExpressionRequest(t, mux, "cell-A0", "false")
 				res := rec.Result()
 				document := domtest.Response(t, res)
 				assert.Equal(t, http.StatusOK, res.StatusCode)
@@ -184,13 +191,15 @@ func TestServer(t *testing.T) {
 	t.Run("cell identifiers", func(t *testing.T) {
 		t.Run("simple cell reference", func(t *testing.T) {
 			s := setup(1, 2)
+			mux := s.routes()
+
 			{ // setup some cell to reference
-				rec := setCellExpressionRequest(t, s, "cell-A0", "100")
+				rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 			}
 			{ // reference the cell
-				rec := setCellExpressionRequest(t, s, "cell-A1", "A0")
+				rec := setCellExpressionRequest(t, mux, "cell-A1", "A0")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 				document := domtest.Response(t, res)
@@ -207,13 +216,14 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("parsing a huge cell value fails", func(t *testing.T) {
 			s := setup(1, 2)
+			mux := s.routes()
 			{ // setup some cell to reference
 				n := new(big.Int)
 				n = n.SetInt64(math.MaxInt64)
 				n = n.Add(n, big.NewInt(1))
 				id := "cell-A" + n.String()
 				t.Log(id)
-				rec := setCellExpressionRequest(t, s, id, "100")
+				rec := setCellExpressionRequest(t, mux, id, "100")
 				res := rec.Result()
 				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 				buf, _ := io.ReadAll(res.Body)
@@ -222,34 +232,36 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("parsing a negative cell value", func(t *testing.T) {
 			s := setup(1, 2)
+			mux := s.routes()
 			{ // setup some cell to reference
 				n := new(big.Int)
 				n = n.SetInt64(math.MinInt64)
 				n.Add(n, big.NewInt(1))
-				rec := setCellExpressionRequest(t, s, "cell-A-1", "100")
+				rec := setCellExpressionRequest(t, mux, "cell-A-1", "100")
 				res := rec.Result()
 				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
 			}
 		})
 		t.Run("updating referencing cells", func(t *testing.T) {
 			s := setup(1, 3)
+			mux := s.routes()
 			{ // setup some cell to reference
-				rec := setCellExpressionRequest(t, s, "cell-A0", "100")
+				rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 			}
 			{ // setup some referencing cell to reference
-				rec := setCellExpressionRequest(t, s, "cell-A1", "A0")
+				rec := setCellExpressionRequest(t, mux, "cell-A1", "A0")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 			}
 			{ // setup some referencing cell to reference
-				rec := setCellExpressionRequest(t, s, "cell-A2", "A1")
+				rec := setCellExpressionRequest(t, mux, "cell-A2", "A1")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 			}
 			{ // update the initial cell
-				rec := setCellExpressionRequest(t, s, "cell-A0", "20")
+				rec := setCellExpressionRequest(t, mux, "cell-A0", "20")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 				document := domtest.Response(t, res)
@@ -270,6 +282,7 @@ func TestServer(t *testing.T) {
 	t.Run("upload", func(t *testing.T) {
 		t.Run("example file", func(t *testing.T) {
 			s := setup(1, 1)
+			mux := s.routes()
 
 			{ // upload table.json
 				// language=json
@@ -283,7 +296,7 @@ func TestServer(t *testing.T) {
     {"id": "B1", "ex": "MAX_ROW"}
   ]
 }`
-				rec := uploadJSONTableRequest(t, s, tableJSON)
+				rec := uploadJSONTableRequest(t, mux, tableJSON)
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 
@@ -295,7 +308,7 @@ func TestServer(t *testing.T) {
 			{ // asser the values are calculated
 				req := httptest.NewRequest(http.MethodGet, "/", nil)
 				rec := httptest.NewRecorder()
-				s.routes().ServeHTTP(rec, req)
+				mux.ServeHTTP(rec, req)
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 				document := domtest.Response(t, res)
@@ -316,18 +329,18 @@ func TestServer(t *testing.T) {
 	})
 }
 
-func setCellExpressionRequest(t *testing.T, s *server, cell string, value string) *httptest.ResponseRecorder {
+func setCellExpressionRequest(t *testing.T, mux http.Handler, cell string, value string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(http.MethodPatch, "/table", strings.NewReader(url.Values{
 		cell: []string{value},
 	}.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	rec := httptest.NewRecorder()
-	s.routes().ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 	return rec
 }
 
-func uploadJSONTableRequest(t *testing.T, s *server, tableJSON string) *httptest.ResponseRecorder {
+func uploadJSONTableRequest(t *testing.T, mux http.Handler, tableJSON string) *httptest.ResponseRecorder {
 	t.Helper()
 	body := bytes.NewBuffer(nil)
 	writer := multipart.NewWriter(body)
@@ -338,6 +351,6 @@ func uploadJSONTableRequest(t *testing.T, s *server, tableJSON string) *httptest
 	req := httptest.NewRequest(http.MethodPost, "/table.json", body)
 	req.Header.Set("Content-Type", writer.FormDataContentType())
 	rec := httptest.NewRecorder()
-	s.routes().ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, req)
 	return rec
 }
