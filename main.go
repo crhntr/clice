@@ -170,7 +170,7 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		}
 		cell := server.cellPointer(column, row)
 		cell.Error = ""
-		cell.input = normalize(value[0])
+		cell.input = value[0]
 		var node expression.Node
 		if cell.input != "" {
 			node, err = expression.New(cell.input)
@@ -465,6 +465,10 @@ const (
 
 func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	switch ident {
+	case "true":
+		return constant.MakeBool(true), nil
+	case "false":
+		return constant.MakeBool(false), nil
 	case RowIdent:
 		return constant.MakeInt64(int64(s.cell.Row)), nil
 	case ColumnIdent:
@@ -476,6 +480,7 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	case MinRowIdent, MinColumnIdent:
 		return constant.MakeInt64(0), nil
 	default:
+		ident = strings.ToUpper(ident)
 		if !identifierPattern.MatchString(ident) {
 			return nil, fmt.Errorf("unknown variable %s", ident)
 		}
@@ -527,8 +532,4 @@ func columnNumber(label string) int {
 		result = result*26 + int(char) - 64
 	}
 	return result - 1
-}
-
-func normalize(in string) string {
-	return strings.TrimSpace(strings.ToUpper(in))
 }

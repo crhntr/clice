@@ -126,7 +126,6 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("string", func(t *testing.T) {
-			t.Skip("need to remove up-casing of string literals")
 			s := setup(1, 1)
 
 			rec := setCellExpressionRequest(t, s, "cell-A0", `"Hello, world!"`)
@@ -141,17 +140,44 @@ func TestServer(t *testing.T) {
 		})
 
 		t.Run("bool", func(t *testing.T) {
-			t.Skip("need to add literal boolean support")
-			s := setup(1, 1)
+			t.Run("true", func(t *testing.T) {
+				s := setup(1, 1)
 
-			rec := setCellExpressionRequest(t, s, "cell-A0", "true")
-			res := rec.Result()
-			document := domtest.Response(t, res)
-			assert.Equal(t, http.StatusOK, res.StatusCode)
+				{ // add a cell with a bool
+					rec := setCellExpressionRequest(t, s, "cell-A0", "true")
+					res := rec.Result()
+					assert.Equal(t, http.StatusOK, res.StatusCode)
+				}
 
-			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
-				require.Equal(t, cellElement.TextContent(), "true")
-			}
+				{ // add a cell that references the cell with the bool
+					rec := setCellExpressionRequest(t, s, "cell-A1", "!A0")
+					res := rec.Result()
+					assert.Equal(t, http.StatusOK, res.StatusCode)
+				}
+
+				req := httptest.NewRequest(http.MethodGet, "/", nil)
+				rec := httptest.NewRecorder()
+				s.routes().ServeHTTP(rec, req)
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				document := domtest.Response(t, res)
+
+				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
+					require.Equal(t, cellElement.TextContent(), "true")
+				}
+			})
+			t.Run("false", func(t *testing.T) {
+				s := setup(1, 1)
+
+				rec := setCellExpressionRequest(t, s, "cell-A0", "false")
+				res := rec.Result()
+				document := domtest.Response(t, res)
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+
+				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
+					require.Equal(t, cellElement.TextContent(), "false")
+				}
+			})
 		})
 	})
 
