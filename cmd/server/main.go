@@ -14,7 +14,6 @@ import (
 	"sync"
 
 	"github.com/crhntr/clice"
-	"github.com/crhntr/clice/expression"
 )
 
 //go:embed index.html.template
@@ -155,38 +154,21 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 	}
 	server.mut.Lock()
 	defer server.mut.Unlock()
+	var assignments []clice.Assignment
+	const prefix = "cell-"
 	for key, value := range req.Form {
-		if !strings.HasPrefix(key, "cell-") {
+		if !strings.HasPrefix(key, prefix) {
 			continue
 		}
-		column, row, err := clice.CellID(key)
-		if err != nil {
-			http.Error(res, err.Error(), http.StatusBadRequest)
-			return
-		}
-		cell := server.table.EnsureCell(column, row)
-		cell.Error = ""
-		cell.Input = value[0]
-		var node expression.Node
-		if cell.Input != "" {
-			node, err = expression.New(cell.Input)
-			if err != nil {
-				cell.Error = err.Error()
-				continue
-			}
-			s, err := expression.String(node)
-			if err != nil {
-				cell.Error = err.Error()
-				continue
-			}
-			cell.Input = s
-		}
-		cell.Expression = node
+		assignments = append(assignments, clice.Assignment{
+			Identifier: key[len(prefix):],
+			Expression: value[0],
+		})
 	}
-	err := server.table.Evaluate()
+	err := server.table.Apply(assignments...)
 	if err != nil {
 		log.Println(err)
-		server.render(res, req, "table", http.StatusOK, &server.table)
+		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
 	server.render(res, req, "table", http.StatusOK, &server.table)

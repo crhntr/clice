@@ -321,3 +321,31 @@ type Row struct {
 func (row Row) Label() string {
 	return strconv.Itoa(row.Number)
 }
+
+type Assignment struct {
+	Identifier string
+	Expression string
+}
+
+func (table *Table) Apply(assignments ...Assignment) error {
+	var parseError error
+	for _, assignment := range assignments {
+		column, row, err := CellID(assignment.Identifier)
+		if err != nil {
+			return err
+		}
+		cell := table.EnsureCell(column, row)
+		exp, err := expression.New(assignment.Expression)
+		if err != nil {
+			return fmt.Errorf("failed to parse %s expression %s: %w", assignment.Identifier, assignment.Expression, err)
+		}
+		cell.Input = assignment.Expression
+		cell.Value = nil
+		cell.Expression = exp
+		cell.Error = ""
+	}
+	if parseError != nil {
+		return fmt.Errorf("failed to parse some expressions: %w", parseError)
+	}
+	return table.Evaluate()
+}
