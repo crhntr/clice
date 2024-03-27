@@ -36,7 +36,7 @@ func TestServer(t *testing.T) {
 		t.Run("unknown cell", func(t *testing.T) {
 			s := setup(1, 1)
 
-			req := httptest.NewRequest(http.MethodGet, "/cell/peach1", nil)
+			req := httptest.NewRequest(http.MethodGet, "/cell/peach1/edit", nil)
 			rec := httptest.NewRecorder()
 			s.routes().ServeHTTP(rec, req)
 			res := rec.Result()
@@ -70,7 +70,7 @@ func TestServer(t *testing.T) {
 			mux := s.routes()
 			require.Equal(t, http.StatusOK, setCellExpressionRequest(t, mux, "cell-A0", "100").Result().StatusCode)
 
-			req := httptest.NewRequest(http.MethodGet, "/cell/A0", nil)
+			req := httptest.NewRequest(http.MethodGet, "/cell/A0/edit", nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
 			res := rec.Result()
@@ -97,7 +97,7 @@ func TestServer(t *testing.T) {
 			s := setup(1, 1)
 			mux := s.routes()
 
-			req := httptest.NewRequest(http.MethodGet, "/cell/A0", nil)
+			req := httptest.NewRequest(http.MethodGet, "/cell/A0/edit", nil)
 			rec := httptest.NewRecorder()
 			mux.ServeHTTP(rec, req)
 			res := rec.Result()
@@ -124,7 +124,7 @@ func TestServer(t *testing.T) {
 
 	t.Run("setting a cell expression literal", func(t *testing.T) {
 		t.Run("int", func(t *testing.T) {
-			s := setup(1, 1)
+			s := setup(1, 2)
 			mux := s.routes()
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
@@ -132,9 +132,17 @@ func TestServer(t *testing.T) {
 			document := domtest.Response(t, res)
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 
-			cellElement := document.QuerySelector("#cell-A0")
-			require.NotNil(t, cellElement)
-			require.Equal(t, "100", cellElement.TextContent())
+			if cell := document.QuerySelector("#cell-A0"); assert.NotNil(t, cell) {
+				assert.Equal(t, "0", cell.GetAttribute("data-row-column"))
+				assert.Equal(t, "0", cell.GetAttribute("data-row-index"))
+				require.Equal(t, "100", cell.TextContent())
+			}
+
+			if cell := document.QuerySelector("#cell-A1"); assert.NotNil(t, cell) {
+				assert.Equal(t, "0", cell.GetAttribute("data-row-column"))
+				assert.Equal(t, "1", cell.GetAttribute("data-row-index"))
+				assert.Zero(t, cell.TextContent())
+			}
 		})
 
 		t.Run("float", func(t *testing.T) {

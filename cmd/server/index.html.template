@@ -69,8 +69,8 @@
 {{- end}}
 
 {{define "view-cell"}}
-    {{if not .Error -}}
-      <td class="cell" id="cell-{{.ID}}" data-row-column="{{.Column}}" data-row-index="{{.Row}}" hx-get="/cell/{{.ID}}" hx-swap="outerHTML">
+    {{- if not .Error -}}
+      <td class="cell" id="cell-{{.ID}}" data-row-column="{{.Column}}" data-row-index="{{.Row}}" hx-get="/cell/{{.ID}}/edit" hx-swap="outerHTML">
           {{- .String -}}
       </td>
     {{- else -}}

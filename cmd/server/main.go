@@ -16,8 +16,12 @@ import (
 	"github.com/crhntr/clice"
 )
 
-//go:embed index.html.template
-var indexHTMLTemplate string
+var (
+	//go:embed index.html.template
+	indexHTMLTemplate string
+
+	templates = template.Must(template.New("index.html.template").Option("missingkey=error").Parse(indexHTMLTemplate))
+)
 
 func main() {
 	table := clice.NewTable(10, 10)
@@ -26,7 +30,7 @@ func main() {
 	flag.Parse()
 	s := server{
 		table:     table,
-		templates: template.Must(template.New("index.html.template").Option("missingkey=error").Parse(indexHTMLTemplate)),
+		templates: templates,
 	}
 	log.Println("starting server")
 	log.Fatal(http.ListenAndServe(":8080", s.routes()))
@@ -45,7 +49,7 @@ func (server *server) routes() *http.ServeMux {
 	mux.HandleFunc("GET /", server.index)
 	mux.HandleFunc("GET /table.json", server.getTableJSON)
 	mux.HandleFunc("POST /table.json", server.postTableJSON)
-	mux.HandleFunc("GET /cell/{id}", server.getCellEdit)
+	mux.HandleFunc("GET /cell/{id}/edit", server.getCellEdit)
 	mux.HandleFunc("PATCH /table", server.patchTable)
 
 	return mux
