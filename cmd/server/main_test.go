@@ -334,8 +334,8 @@ func TestServer(t *testing.T) {
 
 	t.Run("upload", func(t *testing.T) {
 		t.Run("example file", func(t *testing.T) {
-			// language=json
-			tableJSON := `{
+			const tableJSON =
+			/* language=json */ `{
   "rows": 2,
   "columns": 2,
   "cells": [
