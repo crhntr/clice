@@ -49,6 +49,16 @@ func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
 		if err != nil {
 			return nil, err
 		}
+		switch e.Op.String() {
+		case "&&":
+			if left.String() == "false" {
+				return constant.MakeBool(false), nil
+			}
+		case "||":
+			if left.String() == "true" {
+				return constant.MakeBool(true), nil
+			}
+		}
 		right, err := Evaluate(scope, e.Y)
 		if err != nil {
 			return nil, err

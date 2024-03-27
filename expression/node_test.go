@@ -136,7 +136,9 @@ func TestEvaluate_Integers(t *testing.T) {
 }
 
 func TestEvaluate_Booleans(t *testing.T) {
+	resolveCallCount := 0
 	resolve := fakeScopeFunc(func(s string) (constant.Value, error) {
+		resolveCallCount++
 		switch s {
 		case "happy":
 			return constant.MakeBool(true), nil
@@ -146,8 +148,12 @@ func TestEvaluate_Booleans(t *testing.T) {
 			return constant.MakeUnknown(), fmt.Errorf("unexpected cell reference: %s", s)
 		}
 	})
+	resetCallCount := func() {
+		resolveCallCount = 0
+	}
 
 	t.Run("true", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
 		node, err := expression.New("true")
 		require.NoError(t, err)
 
@@ -159,6 +165,7 @@ func TestEvaluate_Booleans(t *testing.T) {
 	})
 
 	t.Run("false", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
 		node, err := expression.New("false")
 		require.NoError(t, err)
 
@@ -170,6 +177,7 @@ func TestEvaluate_Booleans(t *testing.T) {
 	})
 
 	t.Run("unary operator", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
 		node, err := expression.New("!happy")
 		require.NoError(t, err)
 
@@ -181,6 +189,7 @@ func TestEvaluate_Booleans(t *testing.T) {
 	})
 
 	t.Run("multiple unary operators", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
 		node, err := expression.New("!!happy")
 		require.NoError(t, err)
 
@@ -192,6 +201,19 @@ func TestEvaluate_Booleans(t *testing.T) {
 	})
 
 	t.Run("binary operator and", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
+		node, err := expression.New("happy && wealthy")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "false", value.String())
+		assert.Equal(t, 2, resolveCallCount)
+	})
+	t.Run("binary operator and short circuit", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
 		node, err := expression.New("wealthy && happy")
 		require.NoError(t, err)
 
@@ -200,8 +222,10 @@ func TestEvaluate_Booleans(t *testing.T) {
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "false", value.String())
+		assert.Equal(t, 1, resolveCallCount)
 	})
 	t.Run("binary operator or", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
 		node, err := expression.New("wealthy || happy")
 		require.NoError(t, err)
 
@@ -210,6 +234,19 @@ func TestEvaluate_Booleans(t *testing.T) {
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "true", value.String())
+		assert.Equal(t, 2, resolveCallCount)
+	})
+	t.Run("binary operator or short circuit", func(t *testing.T) {
+		t.Cleanup(resetCallCount)
+		node, err := expression.New("happy || wealthy")
+		require.NoError(t, err)
+
+		value, err := expression.Evaluate(resolve, node)
+		require.NoError(t, err)
+
+		assert.Equal(t, constant.Bool, value.Kind())
+		assert.Equal(t, "true", value.String())
+		assert.Equal(t, 1, resolveCallCount)
 	})
 }
 
