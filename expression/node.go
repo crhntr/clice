@@ -13,7 +13,7 @@ import (
 type Node = ast.Expr
 
 type Scope interface {
-	Resolve(string) (constant.Value, error)
+	Resolve(string) (fmt.Stringer, error)
 }
 
 func New(in string) (ast.Expr, error) {
@@ -33,7 +33,16 @@ func String(expr ast.Expr) (string, error) {
 	return buf.String(), err
 }
 
-func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
+func value(stringer fmt.Stringer) (constant.Value, error) {
+	switch s := stringer.(type) {
+	case constant.Value:
+		return s, nil
+	default:
+		return constant.MakeUnknown(), fmt.Errorf("not a constant: %T", stringer)
+	}
+}
+
+func Evaluate(scope Scope, expr ast.Expr) (_ fmt.Stringer, err error) {
 	switch e := expr.(type) {
 	case *ast.BasicLit:
 		cv := constant.MakeFromLiteral(e.Value, e.Kind, 0)
@@ -43,27 +52,41 @@ func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
 		if err != nil {
 			return nil, err
 		}
-		return constant.UnaryOp(e.Op, x, 0), nil
+		v, err := value(x)
+		if err != nil {
+			return nil, err
+		}
+		return constant.UnaryOp(e.Op, v, 0), nil
 	case *ast.BinaryExpr:
 		left, err := Evaluate(scope, e.X)
 		if err != nil {
 			return nil, err
 		}
-		switch e.Op.String() {
-		case "&&":
-			if left.String() == "false" {
-				return constant.MakeBool(false), nil
-			}
-		case "||":
-			if left.String() == "true" {
-				return constant.MakeBool(true), nil
+		leftValue, err := value(left)
+		if err != nil {
+			return nil, err
+		}
+		if leftValue.Kind() == constant.Bool {
+			switch e.Op.String() {
+			case "&&":
+				if left.String() == "false" {
+					return constant.MakeBool(false), nil
+				}
+			case "||":
+				if left.String() == "true" {
+					return constant.MakeBool(true), nil
+				}
 			}
 		}
 		right, err := Evaluate(scope, e.Y)
 		if err != nil {
 			return nil, err
 		}
-		return constant.BinaryOp(left, e.Op, right), nil
+		rightValue, err := value(right)
+		if err != nil {
+			return nil, err
+		}
+		return constant.BinaryOp(leftValue, e.Op, rightValue), nil
 	case *ast.ParenExpr:
 		return Evaluate(scope, e.X)
 	case *ast.Ident:

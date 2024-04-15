@@ -157,8 +157,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("true")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "true", value.String())
@@ -169,8 +172,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("false")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "false", value.String())
@@ -181,8 +187,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("!happy")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "false", value.String())
@@ -193,8 +202,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("!!happy")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "true", value.String())
@@ -205,8 +217,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("happy && wealthy")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "false", value.String())
@@ -217,8 +232,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("wealthy && happy")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "false", value.String())
@@ -229,8 +247,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("wealthy || happy")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "true", value.String())
@@ -241,8 +262,11 @@ func TestEvaluate_Booleans(t *testing.T) {
 		node, err := expression.New("happy || wealthy")
 		require.NoError(t, err)
 
-		value, err := expression.Evaluate(resolve, node)
+		v, err := expression.Evaluate(resolve, node)
 		require.NoError(t, err)
+
+		value, ok := v.(constant.Value)
+		assert.True(t, ok)
 
 		assert.Equal(t, constant.Bool, value.Kind())
 		assert.Equal(t, "true", value.String())
@@ -362,6 +386,6 @@ func TestString(t *testing.T) {
 
 type fakeScopeFunc func(string) (constant.Value, error)
 
-func (f fakeScopeFunc) Resolve(s string) (constant.Value, error) {
+func (f fakeScopeFunc) Resolve(s string) (fmt.Stringer, error) {
 	return f(s)
 }

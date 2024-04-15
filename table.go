@@ -18,7 +18,7 @@ type Cell struct {
 	column int
 
 	expression ast.Expr
-	value      constant.Value
+	value      fmt.Stringer
 
 	expressionInput string
 
@@ -228,7 +228,7 @@ func newScope(table *Table, cell *Cell) *Scope {
 	}
 }
 
-func (s *Scope) Resolve(ident string) (constant.Value, error) {
+func (s *Scope) Resolve(ident string) (fmt.Stringer, error) {
 	switch ident {
 	case "iota":
 		return constant.MakeInt64(int64(s.cell.row)), nil
