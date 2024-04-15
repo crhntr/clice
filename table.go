@@ -318,7 +318,6 @@ type Assignment struct {
 }
 
 func (table *Table) Apply(assignments ...Assignment) error {
-	var parseError error
 	for _, assignment := range assignments {
 		column, row, err := CellID(assignment.Identifier)
 		if err != nil {
@@ -333,9 +332,6 @@ func (table *Table) Apply(assignments ...Assignment) error {
 		cell.expression = exp
 		cell.value = nil
 		cell.err = nil
-	}
-	if parseError != nil {
-		return fmt.Errorf("failed to parse some expressions: %w", parseError)
 	}
 	return table.Evaluate()
 }
