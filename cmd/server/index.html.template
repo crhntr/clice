@@ -1,21 +1,24 @@
 {{- define "edit-cell" -}}
-  <td class="cell" id="cell-{{.ID}}" data-column-index="{{.Column}}" data-row-index="{{.Row}}" >
+  <td id="cell-{{.ID}}" class="cell" data-column-index="{{.Column}}" data-row-index="{{.Row}}" >
     <input type="text" name="cell-{{.ID}}" value="{{.Expression}}" aria-label="expression for cell {{.ID}}" autofocus>
       {{if .Error}}
         <p style="color: red;">{{.Error}}</p>
       {{end}}
   </td>
-{{- end -}}
+{{- end}}
 
-{{- define "view-cell" -}}
-    {{- if not .Error -}}
-      <td class="cell" id="cell-{{.ID}}" data-row-column="{{.Column}}" data-row-index="{{.Row}}" hx-get="/cell/{{.ID}}/edit" hx-swap="outerHTML">
-          {{- .String -}}
-      </td>
-    {{- else -}}
-        {{template "edit-cell" .}}
-    {{- end -}}
-{{- end -}}
+{{- define "view-cell"}}
+  {{- if not .Error}}
+    <td id="cell-{{.ID}}"
+        class="cell"
+        data-row-column="{{.Column}}"
+        data-row-index="{{.Row}}"
+        hx-get="/cell/{{.ID}}/edit"
+        hx-swap="outerHTML">{{.String}}</td>
+  {{- else}}
+    {{- template "edit-cell" .}}
+  {{- end}}
+{{- end}}
 
 <!DOCTYPE html>
 <html lang="en">
@@ -25,8 +28,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
 
-  <script src="https://unpkg.com/htmx.org@1.9.6"
-          integrity="sha384-FhXw7b6AlE/jyjlZH5iHa/tTe9EpJ1Y55RjcgPbjeWMskSxZt1v9qkxLJWNJaGni"
+  <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.6/dist/htmx.min.js"
+          integrity="sha384-Akqfrbj/HpNVo8k11SXBb6TlBWmXXlYQrCSqEWmyKJe+hDm3Z/B2WVG4smwBkRVm"
           crossorigin="anonymous"></script>
 
   <style>
@@ -66,8 +69,11 @@
     {{end}}
   <a href="/table.json" download>Download</a>
 
-  <form hx-encoding='multipart/form-data' hx-post='/table.json'
-        _='on htmx:xhr:progress(loaded, total) set #progress.value to (loaded/total)*100' hx-target="#table" hx-swap="outerHTML">
+  <form hx-encoding='multipart/form-data'
+        hx-post='/table.json'
+        hx-target='#table'
+        hx-swap='outerHTML'
+        hx-on='htmx:xhr:progress: detail.elt.querySelector("#progress").value = (event.detail.loaded / event.detail.total) * 100'>
     <input type='file' name='table.json'>
     <button>
       Upload
