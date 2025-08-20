@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"cmp"
+	"embed"
 	_ "embed"
 	"encoding/json"
 	"flag"
@@ -9,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -17,10 +20,10 @@ import (
 )
 
 var (
-	//go:embed index.html.template
-	indexHTMLTemplate string
+	//go:embed *.template
+	templateSource embed.FS
 
-	templates = template.Must(template.New("index.html.template").Option("missingkey=error").Parse(indexHTMLTemplate))
+	templates = template.Must(template.New("index.html.template").Option("missingkey=error").ParseFS(templateSource, "*"))
 )
 
 func main() {
@@ -29,21 +32,18 @@ func main() {
 	flag.IntVar(&table.RowLen, "rows", table.RowLen, "the number of table rows")
 	flag.Parse()
 	s := server{
-		table:     table,
-		templates: templates,
+		table: table,
 	}
 	log.Println("starting server")
-	log.Fatal(http.ListenAndServe(":8080", s.routes()))
+	log.Fatal(http.ListenAndServe(":"+cmp.Or(os.Getenv("PORT"), "8080"), s.ServeMux()))
 }
 
 type server struct {
 	table clice.Table
 	mut   sync.RWMutex
-
-	templates *template.Template
 }
 
-func (server *server) routes() *http.ServeMux {
+func (server *server) ServeMux() *http.ServeMux {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", server.index)
@@ -55,22 +55,13 @@ func (server *server) routes() *http.ServeMux {
 	return mux
 }
 
-func (server *server) render(res http.ResponseWriter, _ *http.Request, name string, status int, data any) {
-	var buf bytes.Buffer
-	if err := server.templates.ExecuteTemplate(&buf, name, data); err != nil {
-		http.Error(res, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	header := res.Header()
-	header.Set("content-type", "text/html")
-	res.WriteHeader(status)
-	_, _ = res.Write(buf.Bytes())
-}
-
-func (server *server) index(res http.ResponseWriter, req *http.Request) {
+func (server *server) index(res http.ResponseWriter, _ *http.Request) {
 	server.mut.RLock()
 	defer server.mut.RUnlock()
-	server.render(res, req, "index.html.template", http.StatusOK, &server.table)
+
+	render(res, func(w io.Writer) error {
+		return templates.ExecuteTemplate(w, "index.html.template", &server.table)
+	})
 }
 
 func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
@@ -84,7 +75,10 @@ func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
 	}
 
 	cell := server.table.Cell(column, row)
-	server.render(res, req, "edit-cell", http.StatusOK, cell)
+
+	render(res, func(w io.Writer) error {
+		return templates.ExecuteTemplate(w, "edit-cell", cell)
+	})
 }
 
 func (server *server) getTableJSON(res http.ResponseWriter, _ *http.Request) {
@@ -144,7 +138,10 @@ func (server *server) postTableJSON(res http.ResponseWriter, req *http.Request) 
 	server.mut.Lock()
 	defer server.mut.Unlock()
 	server.table = table
-	server.render(res, req, "table", http.StatusOK, &server.table)
+
+	render(res, func(w io.Writer) error {
+		return templates.ExecuteTemplate(w, "table", &server.table)
+	})
 }
 
 func closeAndIgnoreError(c io.Closer) {
@@ -175,5 +172,22 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
-	server.render(res, req, "table", http.StatusOK, &server.table)
+
+	render(res, func(w io.Writer) error {
+		return templates.ExecuteTemplate(w, "table", &server.table)
+	})
+}
+
+func render(res http.ResponseWriter, execute func(w io.Writer) error) {
+	var buf bytes.Buffer
+	if err := execute(&buf); err != nil {
+		http.Error(res, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	header := res.Header()
+	header.Set("content-type", "text/html; charset=utf-8")
+	header.Set("content-length", strconv.Itoa(buf.Len()))
+	header.Set("cache-control", "no-cache")
+	res.WriteHeader(http.StatusOK)
+	_, _ = res.Write(buf.Bytes())
 }
