@@ -7,7 +7,7 @@ toolchain go1.24.0
 require (
 	github.com/crhntr/dom v0.1.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/net v0.39.0
+	golang.org/x/net v0.43.0
 )
 
 require (
