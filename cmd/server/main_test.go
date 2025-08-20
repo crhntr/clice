@@ -75,9 +75,9 @@ func TestServer(t *testing.T) {
 			mux.ServeHTTP(rec, req)
 			res := rec.Result()
 			assert.Equal(t, http.StatusOK, res.StatusCode)
-			elements := domtest.DocumentFragment(t, res.Body, atom.Tr)
-			require.Len(t, elements, 1)
-			cell := elements[0]
+			fragment := domtest.ParseResponseDocumentFragment(t, res, atom.Tr)
+			require.Equal(t, 1, fragment.ChildElementCount())
+			cell := fragment.FirstElementChild()
 
 			require.True(t, cell.Matches(`.cell`))
 
@@ -102,9 +102,9 @@ func TestServer(t *testing.T) {
 			mux.ServeHTTP(rec, req)
 			res := rec.Result()
 			assert.Equal(t, http.StatusOK, res.StatusCode)
-			elements := domtest.DocumentFragment(t, res.Body, atom.Tr)
-			require.Len(t, elements, 1)
-			cell := elements[0]
+			fragment := domtest.ParseResponseDocumentFragment(t, res, atom.Tr)
+			require.Equal(t, 1, fragment.ChildElementCount())
+			cell := fragment.FirstElementChild()
 
 			require.True(t, cell.Matches(`.cell`))
 
@@ -129,7 +129,7 @@ func TestServer(t *testing.T) {
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
 			res := rec.Result()
-			document := domtest.Response(t, res)
+			document := domtest.ParseResponseDocument(t, res)
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 
 			if cell := document.QuerySelector("#cell-A0"); assert.NotNil(t, cell) {
@@ -151,7 +151,7 @@ func TestServer(t *testing.T) {
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", "0.5")
 			res := rec.Result()
-			document := domtest.Response(t, res)
+			document := domtest.ParseResponseDocument(t, res)
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 
 			if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
@@ -165,7 +165,7 @@ func TestServer(t *testing.T) {
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", `"Hello, world!"`)
 			res := rec.Result()
-			document := domtest.Response(t, res)
+			document := domtest.ParseResponseDocument(t, res)
 
 			assert.Equal(t, http.StatusOK, res.StatusCode)
 
@@ -196,7 +196,7 @@ func TestServer(t *testing.T) {
 				mux.ServeHTTP(rec, req)
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
-				document := domtest.Response(t, res)
+				document := domtest.ParseResponseDocument(t, res)
 
 				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
 					require.Equal(t, "true", cellElement.TextContent())
@@ -208,7 +208,7 @@ func TestServer(t *testing.T) {
 
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "false")
 				res := rec.Result()
-				document := domtest.Response(t, res)
+				document := domtest.ParseResponseDocument(t, res)
 				assert.Equal(t, http.StatusOK, res.StatusCode)
 
 				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
@@ -232,7 +232,7 @@ func TestServer(t *testing.T) {
 				rec := setCellExpressionRequest(t, mux, "cell-A1", "A0")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
-				document := domtest.Response(t, res)
+				document := domtest.ParseResponseDocument(t, res)
 
 				if cellElement := document.QuerySelector("#cell-A0"); assert.NotNil(t, cellElement) {
 					assert.NotNil(t, cellElement)
@@ -325,7 +325,7 @@ func TestServer(t *testing.T) {
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "20")
 				res := rec.Result()
 				assert.Equal(t, http.StatusOK, res.StatusCode)
-				document := domtest.Response(t, res)
+				document := domtest.ParseResponseDocument(t, res)
 
 				cells := document.QuerySelectorAll(`.cell`)
 				assert.Equal(t, 3, cells.Length())
@@ -373,7 +373,7 @@ func TestServer(t *testing.T) {
 					mux.ServeHTTP(rec, req)
 					res := rec.Result()
 					assert.Equal(t, http.StatusOK, res.StatusCode)
-					document := domtest.Response(t, res)
+					document := domtest.ParseResponseDocument(t, res)
 					if el := document.QuerySelector("#cell-A0"); assert.NotNil(t, el) {
 						assert.Contains(t, el.TextContent(), "100")
 					}
