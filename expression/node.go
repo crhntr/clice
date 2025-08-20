@@ -13,7 +13,7 @@ import (
 type Node = ast.Expr
 
 type Scope interface {
-	Resolve(string) (fmt.Stringer, error)
+	Resolve(string) (constant.Value, error)
 }
 
 func New(in string) (ast.Expr, error) {
@@ -33,56 +33,36 @@ func String(expr ast.Expr) (string, error) {
 	return buf.String(), err
 }
 
-func value(stringer fmt.Stringer) (constant.Value, error) {
-	switch s := stringer.(type) {
-	case constant.Value:
-		return s, nil
-	default:
-		return constant.MakeUnknown(), fmt.Errorf("not a constant: %T", stringer)
-	}
-}
-
-func Evaluate(scope Scope, expr ast.Expr) (_ fmt.Stringer, err error) {
+func Evaluate(scope Scope, expr ast.Expr) (_ constant.Value, err error) {
 	switch e := expr.(type) {
 	case *ast.BasicLit:
 		cv := constant.MakeFromLiteral(e.Value, e.Kind, 0)
 		return cv, nil
 	case *ast.UnaryExpr:
-		x, err := Evaluate(scope, e.X)
-		if err != nil {
-			return nil, err
-		}
-		v, err := value(x)
+		v, err := Evaluate(scope, e.X)
 		if err != nil {
 			return nil, err
 		}
 		return constant.UnaryOp(e.Op, v, 0), nil
 	case *ast.BinaryExpr:
-		left, err := Evaluate(scope, e.X)
-		if err != nil {
-			return nil, err
-		}
-		leftValue, err := value(left)
+		leftValue, err := Evaluate(scope, e.X)
 		if err != nil {
 			return nil, err
 		}
 		if leftValue.Kind() == constant.Bool {
+			left := constant.BoolVal(leftValue)
 			switch e.Op.String() {
 			case "&&":
-				if left.String() == "false" {
+				if !left {
 					return constant.MakeBool(false), nil
 				}
 			case "||":
-				if left.String() == "true" {
+				if left {
 					return constant.MakeBool(true), nil
 				}
 			}
 		}
-		right, err := Evaluate(scope, e.Y)
-		if err != nil {
-			return nil, err
-		}
-		rightValue, err := value(right)
+		rightValue, err := Evaluate(scope, e.Y)
 		if err != nil {
 			return nil, err
 		}

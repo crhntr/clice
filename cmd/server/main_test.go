@@ -23,7 +23,7 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	var templates = template.Must(template.New("index.html.template").Parse(indexHTMLTemplate))
+	templates := template.Must(template.New("index.html.template").Parse(indexHTMLTemplate))
 
 	setup := func(columns, rows int) *server {
 		return &server{

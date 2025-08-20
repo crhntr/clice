@@ -386,6 +386,6 @@ func TestString(t *testing.T) {
 
 type fakeScopeFunc func(string) (constant.Value, error)
 
-func (f fakeScopeFunc) Resolve(s string) (fmt.Stringer, error) {
+func (f fakeScopeFunc) Resolve(s string) (constant.Value, error) {
 	return f(s)
 }
