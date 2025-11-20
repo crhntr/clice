@@ -59,7 +59,7 @@ func (server *server) index(res http.ResponseWriter, _ *http.Request) {
 	server.mut.RLock()
 	defer server.mut.RUnlock()
 
-	render(res, func(w io.Writer) error {
+	renderHTML(res, func(w io.Writer) error {
 		return templates.ExecuteTemplate(w, "index.html.template", &server.table)
 	})
 }
@@ -76,7 +76,7 @@ func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
 
 	cell := server.table.Cell(column, row)
 
-	render(res, func(w io.Writer) error {
+	renderHTML(res, func(w io.Writer) error {
 		return templates.ExecuteTemplate(w, "edit-cell", cell)
 	})
 }
@@ -94,16 +94,7 @@ func (server *server) getTableJSON(res http.ResponseWriter, _ *http.Request) {
 	}
 	server.table.Cells = filtered
 
-	buf, err := json.MarshalIndent(server.table, "", "\t")
-	if err != nil {
-		http.Error(res, err.Error(), http.StatusBadRequest)
-		return
-	}
-	h := res.Header()
-	h.Set("content-type", "application/json")
-	h.Set("content-length", strconv.Itoa(len(buf)))
-	res.WriteHeader(http.StatusOK)
-	_, _ = res.Write(buf)
+	renderJSON(res, server.table)
 }
 
 func (server *server) postTableJSON(res http.ResponseWriter, req *http.Request) {
@@ -139,7 +130,7 @@ func (server *server) postTableJSON(res http.ResponseWriter, req *http.Request) 
 	defer server.mut.Unlock()
 	server.table = table
 
-	render(res, func(w io.Writer) error {
+	renderHTML(res, func(w io.Writer) error {
 		return templates.ExecuteTemplate(w, "table", &server.table)
 	})
 }
@@ -173,21 +164,34 @@ func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	render(res, func(w io.Writer) error {
+	renderHTML(res, func(w io.Writer) error {
 		return templates.ExecuteTemplate(w, "table", &server.table)
 	})
 }
 
-func render(res http.ResponseWriter, execute func(w io.Writer) error) {
+func renderHTML(res http.ResponseWriter, execute func(w io.Writer) error) {
 	var buf bytes.Buffer
 	if err := execute(&buf); err != nil {
 		http.Error(res, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	header := res.Header()
-	header.Set("content-type", "text/html; charset=utf-8")
-	header.Set("content-length", strconv.Itoa(buf.Len()))
-	header.Set("cache-control", "no-cache")
-	res.WriteHeader(http.StatusOK)
-	_, _ = res.Write(buf.Bytes())
+	writeResponse(res, http.StatusOK, "text/html; charset=utf-8", buf.Bytes())
+}
+
+func renderJSON(res http.ResponseWriter, data any) {
+	buf, err := json.MarshalIndent(data, "", "\t")
+	if err != nil {
+		http.Error(res, err.Error(), http.StatusBadRequest)
+		return
+	}
+	writeResponse(res, http.StatusOK, "application/json; charset=utf-8", buf)
+}
+
+func writeResponse(res http.ResponseWriter, code int, contentType string, buf []byte) {
+	h := res.Header()
+	h.Set("content-type", contentType)
+	h.Set("content-length", strconv.Itoa(len(buf)))
+	h.Set("cache-control", "no-cache")
+	res.WriteHeader(code)
+	_, _ = res.Write(buf)
 }

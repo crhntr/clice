@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"html/template"
 	"io"
 	"math"
 	"math/big"
@@ -23,12 +22,9 @@ import (
 )
 
 func TestServer(t *testing.T) {
-	templates := template.Must(template.New("index.html.template").Parse(indexHTMLTemplate))
-
 	setup := func(columns, rows int) *server {
 		return &server{
-			table:     clice.NewTable(columns, rows),
-			templates: templates,
+			table: clice.NewTable(columns, rows),
 		}
 	}
 
@@ -38,7 +34,7 @@ func TestServer(t *testing.T) {
 
 			req := httptest.NewRequest(http.MethodGet, "/cell/peach1/edit", nil)
 			rec := httptest.NewRecorder()
-			s.routes().ServeHTTP(rec, req)
+			s.ServeMux().ServeHTTP(rec, req)
 			res := rec.Result()
 
 			assert.Equal(t, http.StatusBadRequest, res.StatusCode)
@@ -46,7 +42,7 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("row out of bounds", func(t *testing.T) {
 			s := setup(1, 1)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			rec := setCellExpressionRequest(t, mux, "A0", "A1")
 			res := rec.Result()
@@ -56,7 +52,7 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("column out of bounds", func(t *testing.T) {
 			s := setup(1, 1)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			rec := setCellExpressionRequest(t, mux, "A0", "B0")
 			res := rec.Result()
@@ -67,7 +63,7 @@ func TestServer(t *testing.T) {
 		t.Run("cell with expression", func(t *testing.T) {
 			s := setup(1, 1)
 
-			mux := s.routes()
+			mux := s.ServeMux()
 			require.Equal(t, http.StatusOK, setCellExpressionRequest(t, mux, "cell-A0", "100").Result().StatusCode)
 
 			req := httptest.NewRequest(http.MethodGet, "/cell/A0/edit", nil)
@@ -95,7 +91,7 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("empty table no cells", func(t *testing.T) {
 			s := setup(1, 1)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			req := httptest.NewRequest(http.MethodGet, "/cell/A0/edit", nil)
 			rec := httptest.NewRecorder()
@@ -125,7 +121,7 @@ func TestServer(t *testing.T) {
 	t.Run("setting a cell expression literal", func(t *testing.T) {
 		t.Run("int", func(t *testing.T) {
 			s := setup(1, 2)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
 			res := rec.Result()
@@ -147,7 +143,7 @@ func TestServer(t *testing.T) {
 
 		t.Run("float", func(t *testing.T) {
 			s := setup(1, 1)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", "0.5")
 			res := rec.Result()
@@ -161,7 +157,7 @@ func TestServer(t *testing.T) {
 
 		t.Run("string", func(t *testing.T) {
 			s := setup(1, 1)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			rec := setCellExpressionRequest(t, mux, "cell-A0", `"Hello, world!"`)
 			res := rec.Result()
@@ -177,7 +173,7 @@ func TestServer(t *testing.T) {
 		t.Run("bool", func(t *testing.T) {
 			t.Run("true", func(t *testing.T) {
 				s := setup(1, 1)
-				mux := s.routes()
+				mux := s.ServeMux()
 
 				{ // add a cell with a bool
 					rec := setCellExpressionRequest(t, mux, "cell-A0", "true")
@@ -204,7 +200,7 @@ func TestServer(t *testing.T) {
 			})
 			t.Run("false", func(t *testing.T) {
 				s := setup(1, 1)
-				mux := s.routes()
+				mux := s.ServeMux()
 
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "false")
 				res := rec.Result()
@@ -221,7 +217,7 @@ func TestServer(t *testing.T) {
 	t.Run("cell identifiers", func(t *testing.T) {
 		t.Run("simple cell reference", func(t *testing.T) {
 			s := setup(1, 2)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			{ // setup some cell to reference
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
@@ -247,7 +243,7 @@ func TestServer(t *testing.T) {
 
 		t.Run("self reference", func(t *testing.T) {
 			s := setup(1, 1)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			{ // setup some cell to reference
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "A0")
@@ -259,7 +255,7 @@ func TestServer(t *testing.T) {
 
 		t.Run("loop reference", func(t *testing.T) {
 			s := setup(1, 2)
-			mux := s.routes()
+			mux := s.ServeMux()
 
 			{ // setup some cell to reference
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "A1")
@@ -277,7 +273,7 @@ func TestServer(t *testing.T) {
 
 		t.Run("parsing a huge cell value fails", func(t *testing.T) {
 			s := setup(1, 2)
-			mux := s.routes()
+			mux := s.ServeMux()
 			{ // setup some cell to reference
 				n := new(big.Int)
 				n = n.SetInt64(math.MaxInt64)
@@ -293,7 +289,7 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("parsing a negative cell value", func(t *testing.T) {
 			s := setup(1, 2)
-			mux := s.routes()
+			mux := s.ServeMux()
 			{ // setup some cell to reference
 				n := new(big.Int)
 				n = n.SetInt64(math.MinInt64)
@@ -305,7 +301,7 @@ func TestServer(t *testing.T) {
 		})
 		t.Run("updating referencing cells", func(t *testing.T) {
 			s := setup(1, 3)
-			mux := s.routes()
+			mux := s.ServeMux()
 			{ // setup some cell to reference
 				rec := setCellExpressionRequest(t, mux, "cell-A0", "100")
 				res := rec.Result()
@@ -355,7 +351,7 @@ func TestServer(t *testing.T) {
 }`
 			t.Run("upload json", func(t *testing.T) {
 				s := setup(2, 2)
-				mux := s.routes()
+				mux := s.ServeMux()
 
 				{ // upload table.json
 					rec := uploadJSONTableRequest(t, mux, tableJSON)
@@ -390,7 +386,7 @@ func TestServer(t *testing.T) {
 			})
 			t.Run("example file", func(t *testing.T) {
 				s := setup(2, 2)
-				mux := s.routes()
+				mux := s.ServeMux()
 
 				for _, update := range []struct {
 					ID         string
