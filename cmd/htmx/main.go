@@ -135,10 +135,6 @@ func (server *server) postTableJSON(res http.ResponseWriter, req *http.Request) 
 	})
 }
 
-func closeAndIgnoreError(c io.Closer) {
-	_ = c.Close()
-}
-
 func (server *server) patchTable(res http.ResponseWriter, req *http.Request) {
 	if err := req.ParseForm(); err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
@@ -194,4 +190,8 @@ func writeResponse(res http.ResponseWriter, code int, contentType string, buf []
 	h.Set("cache-control", "no-cache")
 	res.WriteHeader(code)
 	_, _ = res.Write(buf)
+}
+
+func closeAndIgnoreError(c io.Closer) {
+	_ = c.Close()
 }
