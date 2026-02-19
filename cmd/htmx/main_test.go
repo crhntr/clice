@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -297,6 +298,30 @@ func TestServer(t *testing.T) {
 				rec := setCellExpressionRequest(t, mux, "cell-A-1", "100")
 				res := rec.Result()
 				assert.Equal(t, http.StatusBadRequest, res.StatusCode)
+			}
+		})
+		t.Run("many columns", func(t *testing.T) {
+			s := setup(1000, 1)
+			mux := s.ServeMux()
+			{ // setup some cell to reference
+				body := make(url.Values, s.table.ColumnLen)
+				for column := range s.table.ColumnLen {
+					body["cell-"+clice.NewCellID(column, 0)] = []string{strconv.Itoa(column * column)}
+				}
+				req := httptest.NewRequest(http.MethodPatch, "/table", strings.NewReader(body.Encode()))
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				rec := httptest.NewRecorder()
+				mux.ServeHTTP(rec, req)
+				res := rec.Result()
+				assert.Equal(t, http.StatusOK, res.StatusCode)
+				document := domtest.ParseResponseDocumentFragment(t, res, atom.Div)
+
+				cellCount := 0
+				for cell := range document.QuerySelectorSequence(`.cell`) {
+					assert.Contains(t, cell.TextContent(), strconv.Itoa(cellCount*cellCount), cell.OuterHTML())
+					cellCount++
+				}
+				require.Equal(t, s.table.ColumnLen, cellCount)
 			}
 		})
 		t.Run("updating referencing cells", func(t *testing.T) {
