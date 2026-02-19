@@ -111,9 +111,7 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 	return table.Evaluate()
 }
 
-func (cell *Cell) ID() string {
-	return fmt.Sprintf("%s%d", columnLabel(cell.column), cell.row)
-}
+func (cell *Cell) ID() string { return NewCellID(cell.column, cell.row) }
 
 type Table struct {
 	ColumnLen int    `json:"columns"`
@@ -279,7 +277,8 @@ func ParseCellID(in string) (int, int, error) {
 }
 
 func NewCellID(column, row int) string {
-	return columnLabel(column) + strconv.Itoa(row)
+	buf := make([]byte, 0, digitsInBase(column, columnCharacterCount)+digitsInBase(row, 10))
+	return string(strconv.AppendInt(columnLabel(buf, column), int64(row), 10))
 }
 
 func columnNumber(label string) int {
@@ -295,17 +294,41 @@ type Column struct {
 }
 
 func (column Column) Label() string {
-	return columnLabel(column.Number)
+	return string(columnLabel(nil, column.Number))
 }
 
-func columnLabel(n int) string {
-	result := ""
+const columnCharacterCount = int('Z') - int('A') + 1
+
+func columnLabel(buf []byte, n int) []byte {
+	initialN := len(buf)
+	buf = slices.Grow(buf, digitsInBase(n, columnCharacterCount))
 	for n >= 0 {
-		remainder := n % 26
-		result = fmt.Sprintf("%c", remainder+65) + result
-		n = n/26 - 1
+		remainder := n % columnCharacterCount
+		buf = append(buf, uint8(remainder+int('A')))
+		n = n/columnCharacterCount - 1
+	}
+	slices.Reverse(buf[initialN:])
+	return buf
+}
+
+func logBaseN(x, n int) int {
+	if x < n {
+		return 0
+	}
+
+	result := 0
+	for x >= n {
+		x /= n
+		result++
 	}
 	return result
+}
+
+func digitsInBase(x, n int) int {
+	if x == 0 {
+		return 1
+	}
+	return logBaseN(x, n) + 1
 }
 
 type Row struct {
