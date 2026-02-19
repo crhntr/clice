@@ -93,7 +93,7 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 	table.RowLen = encoded.RowCount
 	table.ColumnLen = encoded.ColumnCount
 	for _, cell := range encoded.Cells {
-		column, row, err := CellID(cell.ID)
+		column, row, err := ParseCellID(cell.ID)
 		if err != nil {
 			return err
 		}
@@ -236,7 +236,7 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 		if !identifierPattern.MatchString(ident) {
 			return nil, fmt.Errorf("unknown variable %s", ident)
 		}
-		column, row, err := CellID(ident)
+		column, row, err := ParseCellID(ident)
 		if err != nil {
 			return nil, err
 		}
@@ -261,9 +261,9 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	}
 }
 
-var identifierPattern = regexp.MustCompile("(?P<column>[A-Z]+)(?P<row>[0-9]+)")
+var identifierPattern = regexp.MustCompile("^(?P<column>[A-Z]+)(?P<row>[0-9]+)$")
 
-func CellID(in string) (int, int, error) {
+func ParseCellID(in string) (int, int, error) {
 	in = strings.TrimPrefix(in, "cell-")
 	if !identifierPattern.MatchString(in) {
 		return 0, 0, fmt.Errorf("unexpected identifier pattern expected something like A4")
@@ -276,6 +276,10 @@ func CellID(in string) (int, int, error) {
 	}
 	column := columnNumber(columnName)
 	return column, row, nil
+}
+
+func NewCellID(column, row int) string {
+	return columnLabel(column) + strconv.Itoa(row)
 }
 
 func columnNumber(label string) int {
@@ -319,7 +323,7 @@ type Assignment struct {
 
 func (table *Table) Apply(assignments ...Assignment) error {
 	for _, assignment := range assignments {
-		column, row, err := CellID(assignment.Identifier)
+		column, row, err := ParseCellID(assignment.Identifier)
 		if err != nil {
 			return err
 		}

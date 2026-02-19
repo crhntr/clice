@@ -68,7 +68,7 @@ func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
 	server.mut.RLock()
 	defer server.mut.RUnlock()
 
-	column, row, err := clice.CellID(req.PathValue("id"))
+	column, row, err := clice.ParseCellID(req.PathValue("id"))
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
