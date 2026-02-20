@@ -68,13 +68,13 @@ func (server *server) getCellEdit(res http.ResponseWriter, req *http.Request) {
 	server.mut.RLock()
 	defer server.mut.RUnlock()
 
-	column, row, err := clice.ParseCellID(req.PathValue("id"))
+	cid, err := clice.ParseID(req.PathValue("id"))
 	if err != nil {
 		http.Error(res, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	cell := server.table.Cell(column, row)
+	cell := server.table.Cell(cid.Column, cid.Row)
 
 	renderHTML(res, func(w io.Writer) error {
 		return templates.ExecuteTemplate(w, "edit-cell", cell)

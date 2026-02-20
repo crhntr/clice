@@ -306,7 +306,7 @@ func TestServer(t *testing.T) {
 			{ // setup some cell to reference
 				body := make(url.Values, s.table.ColumnLen)
 				for column := range s.table.ColumnLen {
-					body["cell-"+clice.NewCellID(column, 0)] = []string{strconv.Itoa(column * column)}
+					body[(clice.ID{Column: column, Row: 0}).ElementID()] = []string{strconv.Itoa(column * column)}
 				}
 				req := httptest.NewRequest(http.MethodPatch, "/table", strings.NewReader(body.Encode()))
 				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")

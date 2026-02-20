@@ -3,80 +3,12 @@ package clice
 import (
 	"encoding/json"
 	"fmt"
-	"go/ast"
 	"go/constant"
-	"regexp"
 	"slices"
 	"strconv"
-	"strings"
 
 	"github.com/crhntr/clice/expression"
 )
-
-type Cell struct {
-	row    int
-	column int
-
-	expression ast.Expr
-	value      fmt.Stringer
-
-	expressionInput string
-
-	err error
-}
-
-func (cell *Cell) Column() int {
-	return cell.column
-}
-
-func (cell *Cell) Row() int {
-	return cell.row
-}
-
-func (cell *Cell) Expression() string {
-	if cell.expression != nil && cell.err == nil {
-		s, err := expression.String(cell.expression)
-		if err != nil {
-			return cell.expressionInput
-		}
-		return s
-	}
-	return cell.expressionInput
-}
-
-func (cell *Cell) String() string {
-	if cell.value == nil {
-		return ""
-	}
-	return cell.value.String()
-}
-
-func (cell *Cell) Error() string {
-	if cell.err == nil {
-		return ""
-	}
-	return cell.err.Error()
-}
-
-func (cell *Cell) HasExpression() bool {
-	return cell.expression != nil
-}
-
-type EncodedCell struct {
-	ID         string `json:"id"`
-	Expression string `json:"ex"`
-}
-
-func (cell *Cell) MarshalJSON() ([]byte, error) {
-	s, err := expression.String(cell.expression)
-	if err != nil {
-		s = cell.expressionInput
-	}
-	return json.Marshal(EncodedCell{
-		ID:         strings.TrimPrefix(cell.ID(), "cell-"),
-		Expression: s,
-	})
-}
 
 type EncodedTable struct {
 	ColumnCount int           `json:"columns"`
@@ -93,25 +25,19 @@ func (table *Table) UnmarshalJSON(in []byte) error {
 	table.RowLen = encoded.RowCount
 	table.ColumnLen = encoded.ColumnCount
 	for _, cell := range encoded.Cells {
-		column, row, err := ParseCellID(cell.ID)
-		if err != nil {
-			return err
-		}
 		exp, err := expression.New(cell.Expression)
 		if err != nil {
 			return err
 		}
 		table.Cells = append(table.Cells, Cell{
-			column:     column,
-			row:        row,
+			column:     cell.ID.Column,
+			row:        cell.ID.Row,
 			expression: exp,
 		})
 	}
 
 	return table.Evaluate()
 }
-
-func (cell *Cell) ID() string { return NewCellID(cell.column, cell.row) }
 
 type Table struct {
 	ColumnLen int    `json:"columns"`
@@ -190,28 +116,6 @@ func (set visitSet) check(v visit) bool {
 	return visited
 }
 
-func (cell *Cell) evaluate(table *Table, visited visitSet) error {
-	v := visit{
-		colum: cell.column,
-		row:   cell.row,
-	}
-	_, alreadyVisited := visited[v]
-	if alreadyVisited {
-		return fmt.Errorf("recursive reference to %s", cell.ID())
-	}
-	visited[v] = struct{}{}
-	if cell.expression == nil {
-		cell.value = constant.MakeInt64(0)
-		return nil
-	}
-	result, err := expression.Evaluate(newScope(table, cell), cell.expression)
-	if err != nil {
-		return err
-	}
-	cell.value = result
-	return nil
-}
-
 type Scope struct {
 	Table   *Table
 	cell    *Cell
@@ -234,20 +138,20 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 		if !identifierPattern.MatchString(ident) {
 			return nil, fmt.Errorf("unknown variable %s", ident)
 		}
-		column, row, err := ParseCellID(ident)
+		cid, err := ParseID(ident)
 		if err != nil {
 			return nil, err
 		}
-		if row < 0 || row >= s.Table.RowLen {
-			return nil, fmt.Errorf("row index %d out of bounds [0, %d)", row, s.Table.RowLen)
+		if cid.Row < 0 || cid.Row >= s.Table.RowLen {
+			return nil, fmt.Errorf("row index %d out of bounds [0, %d)", cid.Row, s.Table.RowLen)
 		}
-		if column < 0 || column >= s.Table.ColumnLen {
-			return nil, fmt.Errorf("column index %d out of bounds [0, %d)", column, s.Table.ColumnLen)
+		if cid.Column < 0 || cid.Column >= s.Table.ColumnLen {
+			return nil, fmt.Errorf("column index %d out of bounds [0, %d)", cid.Column, s.Table.ColumnLen)
 		}
-		if s.visited.check(visit{row: row, colum: column}) {
+		if s.visited.check(visit{row: cid.Row, colum: cid.Column}) {
 			return nil, fmt.Errorf("recursive reference to %s", ident)
 		}
-		cell := s.Table.Cell(column, row)
+		cell := s.Table.Cell(cid.Column, cid.Row)
 		if cell.expression == nil {
 			return constant.MakeInt64(0), nil
 		}
@@ -259,76 +163,12 @@ func (s *Scope) Resolve(ident string) (constant.Value, error) {
 	}
 }
 
-var identifierPattern = regexp.MustCompile("^(?P<column>[A-Z]+)(?P<row>[0-9]+)$")
-
-func ParseCellID(in string) (int, int, error) {
-	in = strings.TrimPrefix(in, "cell-")
-	if !identifierPattern.MatchString(in) {
-		return 0, 0, fmt.Errorf("unexpected identifier pattern expected something like A4")
-	}
-	parts := identifierPattern.FindStringSubmatch(in)
-	columnName := parts[identifierPattern.SubexpIndex("column")]
-	row, err := strconv.Atoi(parts[identifierPattern.SubexpIndex("row")])
-	if err != nil {
-		return 0, 0, fmt.Errorf("failed to Parse row number: %w", err)
-	}
-	column := columnNumber(columnName)
-	return column, row, nil
-}
-
-func NewCellID(column, row int) string {
-	buf := make([]byte, 0, digitsInBase(column, columnCharacterCount)+digitsInBase(row, 10))
-	return string(strconv.AppendInt(columnLabel(buf, column), int64(row), 10))
-}
-
-func columnNumber(label string) int {
-	result := 0
-	for _, char := range label {
-		result = result*26 + int(char) - 64
-	}
-	return result - 1
-}
-
 type Column struct {
 	Number int
 }
 
 func (column Column) Label() string {
 	return string(columnLabel(nil, column.Number))
-}
-
-const columnCharacterCount = int('Z') - int('A') + 1
-
-func columnLabel(buf []byte, n int) []byte {
-	initialN := len(buf)
-	buf = slices.Grow(buf, digitsInBase(n, columnCharacterCount))
-	for n >= 0 {
-		remainder := n % columnCharacterCount
-		buf = append(buf, uint8(remainder+int('A')))
-		n = n/columnCharacterCount - 1
-	}
-	slices.Reverse(buf[initialN:])
-	return buf
-}
-
-func logBaseN(x, n int) int {
-	if x < n {
-		return 0
-	}
-
-	result := 0
-	for x >= n {
-		x /= n
-		result++
-	}
-	return result
-}
-
-func digitsInBase(x, n int) int {
-	if x == 0 {
-		return 1
-	}
-	return logBaseN(x, n) + 1
 }
 
 type Row struct {
@@ -346,11 +186,11 @@ type Assignment struct {
 
 func (table *Table) Apply(assignments ...Assignment) error {
 	for _, assignment := range assignments {
-		column, row, err := ParseCellID(assignment.Identifier)
+		cid, err := ParseID(assignment.Identifier)
 		if err != nil {
 			return err
 		}
-		cell := table.Cell(column, row)
+		cell := table.Cell(cid.Column, cid.Row)
 		exp, err := expression.New(assignment.Expression)
 		if err != nil {
 			return fmt.Errorf("failed to parse %s expression %s: %w", assignment.Identifier, assignment.Expression, err)

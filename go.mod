@@ -1,6 +1,6 @@
 module github.com/crhntr/clice
 
-go 1.24.0
+go 1.25.0
 
 require (
 	github.com/crhntr/dom v0.5.4
