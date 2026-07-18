@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/crhntr/dom/domtest"
+	"github.com/typelate/dom/domtest"
 	"golang.org/x/net/html/atom"
 
 	"github.com/stretchr/testify/assert"
